@@ -8,6 +8,7 @@
 
 #include <assert.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -221,7 +222,7 @@ static int extract_streams(
 }
 
 
-int parse_pdb_stream(
+static int parse_pdb_stream(
     const struct stream *stream,
     uint32_t *age,
     unsigned char *guid)
@@ -248,7 +249,8 @@ int parse_pdb_stream(
 }
 
 
-int parse_dbi_stream(
+static int parse_dbi_stream(
+    struct pdb *pdb,
     const struct stream *stream,
     const struct dbi_stream_header **dbi_header)
 {
@@ -258,15 +260,118 @@ int parse_dbi_stream(
     }
 
     const struct dbi_stream_header *hdr = (const struct dbi_stream_header *)stream->data;
-    if (hdr->version_signature != -1 ||
-        hdr->version_header != DSV_V70) {
+    if (hdr->version_signature != -1 || hdr->version_header != DSV_V70) {
         /* Unknown version */
         return -1;
     }
 
-    // TODO: Parse module/section information substreams
+    if (hdr->global_stream_index >= pdb->nr_streams ||
+        hdr->public_stream_index >= pdb->nr_streams ||
+        hdr->sym_record_stream >= pdb->nr_streams ||
+        hdr->mfc_type_server_index >= pdb->nr_streams) {
+        /* Malformed PDB - bad stream index */
+        return -1;
+    }
 
+    uint32_t total_sz = sizeof(struct dbi_stream_header) +
+        hdr->mod_info_size +
+        hdr->section_contribution_size +
+        hdr->section_map_size +
+        hdr->source_info_size +
+        hdr->type_server_map_size +
+        hdr->optional_dbg_header_size +
+        hdr->ec_substream_size;
+    if (total_sz != stream->size) {
+        /* Malformed PDB - bad stream size */
+        return -1;
+    }
+
+    /* TODO: Parse module info substream */
+    const void *mihdr = stream->data + sizeof(struct dbi_stream_header);
+
+    /* TODO: Parse section contribution substream */
+    const void *schdr = (char *)mihdr + hdr->mod_info_size;
+
+    const struct section_map_header *smhdr = (const struct section_map_header *)((char *)schdr + hdr->section_contribution_size);
+    if (sizeof(struct section_map_header) + sizeof(struct section_map_entry) * smhdr->count > hdr->section_map_size) {
+        /* Malformed PDB - bad substream size */
+        return -1;
+    }
+
+    /* TODO: Parse source file info substream */
+    const void *sihdr = (char *)smhdr + hdr->section_map_size;
+
+    /* TODO: Parse type server map substream */
+    const void *smaphdr = (char *)sihdr + hdr->source_info_size;
+
+    /* TODO: Parse EC substream */
+    const void *echdr = (char *)smaphdr + hdr->type_server_map_size;
+
+    /* TODO: Parse optional debug header stream */
+    const struct debug_header *dbghdr = (const struct debug_header *)((char *)echdr + hdr->ec_substream_size);
+    if (sizeof(struct debug_header) > hdr->optional_dbg_header_size) {
+        /* Malformed PDB - invalid substream size */
+        return -1;
+    }
+
+    for (uint16_t i = 0; i < DBI_NUM_DEBUG_HEADER_STREAMS; i++) {
+        if (dbghdr->streams[i] != UINT16_MAX && dbghdr->streams[i] >= pdb->nr_streams) {
+            /* Malformed PDB - invalid stream index */
+            return -1;
+        }
+    }
+
+    PDB_PRIVATE(pdb)->sm_header = smhdr;
+    PDB_PRIVATE(pdb)->dbg_header = dbghdr;
     *dbi_header = hdr;
+
+    return 0;
+}
+
+
+static int lookup_rva(const struct pdb *pdb, uint16_t section_idx, uint32_t section_offset, uint32_t *rva)
+{
+    assert(pdb != NULL);
+    assert(rva != NULL);
+
+    if (section_idx == 0) {
+        /* NULL section index - no translation */
+        puts("a");
+        return -1;
+    }
+    section_idx -= 1;
+
+    const struct debug_header *dbghdr = PDB_PRIVATE(pdb)->dbg_header;
+    if (dbghdr->section_header_data_stream_index == UINT16_MAX) {
+        /* No section header stream - can't translate address */
+        puts("b");
+        return -1;
+    }
+
+
+
+    const struct stream *shdr_stream = &pdb->streams[dbghdr->section_header_data_stream_index];
+    uint32_t nr_sections = shdr_stream->size / sizeof(struct image_section_header);
+    if (section_idx >= nr_sections) {
+        printf("section_idx = %d\n", section_idx);
+        printf("nr_sections = %d\n", nr_sections);
+        printf("size = %d\n", shdr_stream->size);
+        printf("size2 = %d\n", sizeof(struct image_section_header));
+
+        /* Invalid section index - no translation */
+        puts("c");
+        return -1;
+    }
+
+    const struct image_section_header *shdrs = (const struct image_section_header *)shdr_stream->data;
+    if (section_offset > shdrs[section_idx].misc.virtual_size) {
+        /* Malformed PDB or invalid offset - address not in section */
+        puts("d");
+        return -1;
+    }
+
+    /* TODO: Check for overflow */
+    *rva = shdrs[section_idx].virtual_address + section_offset;
     return 0;
 }
 
@@ -325,6 +430,36 @@ const struct symbol *pdb_enum_public_symbols(const struct pdb *pdb, const struct
         if (cvhdr->record_kind == S_PUB32) {
             const struct cv_public_symbol *cvsym = (const struct cv_public_symbol *)cvhdr;
 
+            uint32_t sym_rva = 0;
+            int err = lookup_rva(pdb, cvsym->section_idx, cvsym->section_offset, &sym_rva);
+            if (err < 0) {
+                /* Invalid section_idx */
+                /*
+                 * TODO: For some reason there are a few symbols that have an invalid section_idx.
+                 *  They all have the same idx, one past the end of the sections array. There are
+                 *  27 ntos sections, and they all have idx=28, so after subtracting 1, they are
+                 *  section_idx == nr_sections, which would cause an overflow.
+                 *
+                 * WARNING: Invalid section index for symbol: __guard_flags idx=28 offset=0x1011c500
+                 * WARNING: Invalid section index for symbol: __guard_longjmp_count idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __ppe_base idx=28 offset=0x7da00000
+                 * WARNING: Invalid section index for symbol: __pxe_top idx=28 offset=0x7dbedfff
+                 * WARNING: Invalid section index for symbol: __pte_base idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __pde_base idx=28 offset=0x40000000
+                 * WARNING: Invalid section index for symbol: __pxe_selfmap idx=28 offset=0x7dbedf68
+                 * WARNING: Invalid section index for symbol: __mm_pfn_database idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __pxe_base idx=28 offset=0x7dbed000
+                 * WARNING: Invalid section index for symbol: __guard_fids_count idx=28 offset=0x17c7
+                 * WARNING: Invalid section index for symbol: __guard_iat_count idx=28 offset=0x2
+                 * WARNING: Invalid section index for symbol: __guard_longjmp_table idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __pte_top idx=28 offset=0xffffffff
+                 * WARNING: Invalid section index for symbol: __pde_top idx=28 offset=0x7fffffff
+                 */
+                fprintf(stderr, "WARNING: Invalid section index for symbol: %s idx=%d offset=0x%x\n",
+                    cvsym->mangled_name, cvsym->section_idx, cvsym->section_offset);
+                // return NULL;
+            }
+
             struct symbol *sym = calloc(1, sizeof(struct symbol) + strlen(cvsym->mangled_name) + 1);
             if (sym == NULL) {
                 return NULL;
@@ -335,9 +470,8 @@ const struct symbol *pdb_enum_public_symbols(const struct pdb *pdb, const struct
             sym->is_function = (cvsym->flags & CVPSF_FUNCTION) != 0;
             sym->is_managed = (cvsym->flags & CVPSF_MANAGED) != 0;
             sym->is_msil = (cvsym->flags & CVPSF_MSIL) != 0;
+            sym->rva = sym_rva;
             strcpy(sym->name, cvsym->mangled_name);
-
-            // TODO: Calculate rva from section_idx and section_offset
 
             return sym;
         }
@@ -365,12 +499,12 @@ const struct pdb * pdb_load(const void *pdbdata, size_t len)
         return NULL;
     }
 
-    err = parse_pdb_stream(&pdb->streams[PDB_STREAM_IDX], &pdb->age, pdb->guid);
+    err = parse_pdb_stream(&pdb->streams[PDB_STREAM_IDX], &pdb->age, pdb->guid.bytes);
     if (err < 0) {
         goto err_close_pdb;
     }
 
-    err = parse_dbi_stream(&pdb->streams[DBI_STREAM_IDX], &PDB_PRIVATE(pdb)->dbi_header);
+    err = parse_dbi_stream(pdb, &pdb->streams[DBI_STREAM_IDX], &PDB_PRIVATE(pdb)->dbi_header);
     if (err < 0) {
         goto err_close_pdb;
     }

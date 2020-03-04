@@ -5,6 +5,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct guid {
+    union {
+        struct {
+            uint32_t data1;
+            uint16_t data2;
+            uint16_t data3;
+            unsigned char data4[8];
+        };
+        unsigned char bytes[16];
+    };
+};
+
 struct stream {
     uint32_t index;
     uint32_t size;
@@ -18,7 +30,7 @@ struct pdb {
     /* Metadata information from the PDB Stream. This can be used to match this
        PDB to an executable. */
     uint32_t age;
-    unsigned char guid[16];
+    struct guid guid;
 };
 
 struct symbol {

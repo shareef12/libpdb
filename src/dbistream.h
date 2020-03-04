@@ -42,4 +42,70 @@ struct dbi_stream_header {
     uint32_t padding;
 };
 
+enum section_map_entry_flags {
+    SMEF_READ = 1 << 0,
+    SMEF_WRITE = 1 << 1,
+    SMEF_EXECUTE = 1 << 2,
+    SMEF_ADDRESS_IS_32BIT = 1 << 3,
+    SMEF_IS_SELECTOR = 1 << 8,
+    SMEF_IS_ABSOLUTE_ADDRESS = 1 << 9,
+    SMEF_IS_GROUP = 1 << 10,
+};
+
+struct section_map_entry {
+    uint16_t flags;
+    uint16_t ovl;
+    uint16_t group;
+    uint16_t frame;
+    uint16_t section_name;
+    uint16_t class_name;
+    uint32_t offset;
+    uint32_t section_length;
+};
+
+struct section_map_header {
+    uint16_t count;
+    uint16_t log_count;
+    const struct section_map_entry entries[];
+};
+
+#define DBI_NUM_DEBUG_HEADER_STREAMS 11
+
+struct debug_header {
+    union {
+        struct {
+            uint16_t fpo_data_stream_index;
+            uint16_t exception_data_stream_index;
+            uint16_t fixup_data_stream_index;
+            uint16_t omap_to_source_data_stream_index;
+            uint16_t omap_from_source_data_stream_index;
+            uint16_t section_header_data_stream_index;
+            uint16_t token_rid_map_stream_index;
+            uint16_t xdata_stream_index;
+            uint16_t pdata_stream_index;
+            uint16_t new_fpo_data_stream_index;
+            uint16_t original_section_header_data_stream_index;
+        };
+        uint16_t streams[DBI_NUM_DEBUG_HEADER_STREAMS];
+    };
+};
+
+#define IMAGE_SIZEOF_SHORT_NAME 8
+
+struct image_section_header {
+    char name[IMAGE_SIZEOF_SHORT_NAME];
+    union {
+        uint32_t physical_address;
+        uint32_t virtual_size;
+    } misc;
+    uint32_t virtual_address;
+    uint32_t size_of_raw_data;
+    uint32_t pointer_to_raw_data;
+    uint32_t pointer_to_relocations;
+    uint32_t pointer_to_line_numbers;
+    uint16_t number_of_relocations;
+    uint16_t number_of_line_numbers;
+    uint32_t characteristics;
+};
+
 #endif // PDB_DBISTREAM_H
