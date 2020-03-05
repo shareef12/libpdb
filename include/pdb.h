@@ -55,5 +55,4 @@ const struct symbol * pdb_lookup_public_symbol(const struct pdb *pdb, const char
 
 const struct symbol * pdb_enum_public_symbols(const struct pdb *pdb, const struct symbol *prev);
 
-
 #endif // PDB_H

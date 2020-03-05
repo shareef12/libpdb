@@ -348,18 +348,15 @@ static int lookup_rva(const struct pdb *pdb, uint16_t section_idx, uint32_t sect
         return -1;
     }
 
-
-
     const struct stream *shdr_stream = &pdb->streams[dbghdr->section_header_data_stream_index];
     uint32_t nr_sections = shdr_stream->size / sizeof(struct image_section_header);
     if (section_idx >= nr_sections) {
-        printf("section_idx = %d\n", section_idx);
-        printf("nr_sections = %d\n", nr_sections);
-        printf("size = %d\n", shdr_stream->size);
-        printf("size2 = %d\n", sizeof(struct image_section_header));
+        fprintf(stderr, "section_idx = %d\n", section_idx);
+        fprintf(stderr, "nr_sections = %d\n", nr_sections);
+        fprintf(stderr, "size = %d\n", shdr_stream->size);
+        fprintf(stderr, "ish_size = %lu\n", sizeof(struct image_section_header));
 
         /* Invalid section index - no translation */
-        puts("c");
         return -1;
     }
 
