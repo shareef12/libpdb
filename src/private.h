@@ -7,8 +7,7 @@ struct pdb_private {
     /* DBI stream info - this pointer is cached because it contains useful stream indices */
     const struct dbi_stream_header *dbi_header;
 
-    /* Section map - this object is used to convert symbol offsets to RVAs */
-    const struct section_map_header *sm_header;
+    /* TODO: Is this still necessary? */
     const struct debug_header *dbg_header;
 };
 

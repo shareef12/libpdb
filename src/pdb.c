@@ -40,7 +40,7 @@ static int validate_superblock(const struct superblock *sb, size_t len)
 {
     bool valid =
         len > sizeof(struct superblock) &&
-        memcmp(sb->file_magic, PDB_SUPERBLOCK_MAGIC, PDB_SUPERBLOCK_MAGIC_SZ) == 0 &&
+        memcmp(sb->file_magic, PDB_MAGIC, PDB_MAGIC_SZ) == 0 &&
         sb->num_blocks > 0 &&
         sb->num_blocks * sb->block_size == len &&
         sb->free_block_map_block < sb->num_blocks &&
@@ -179,32 +179,29 @@ err_free_strms:
 
 
 static int extract_streams(
-    const unsigned char *pdb,
-    size_t len,
-    const struct stream **streams,
-    uint32_t *nr_streams)
+    struct pdb *pdb,
+    const unsigned char *pdbdata,
+    size_t len)
 {
-    assert(streams != NULL);
-    assert(nr_streams != NULL);
+    assert(pdb != NULL);
+    assert(pdbdata != NULL);
 
-    int err = -1;
-
-    const struct superblock *sb = (struct superblock *)pdb;
-    err = validate_superblock(sb, len);
+    const struct superblock *sb = (struct superblock *)pdbdata;
+    int err = validate_superblock(sb, len);
     if (err < 0) {
         return err;
     }
 
     const struct stream_directory *sd = NULL;
     size_t sd_len = 0;
-    err = extract_stream_directory(pdb, len, sb, &sd, &sd_len);
+    err = extract_stream_directory(pdbdata, len, sb, &sd, &sd_len);
     if (err < 0) {
         return err;
     }
 
     const struct stream *strms = NULL;
     uint32_t nr_strms = 0;
-    err = do_extract_streams(pdb, sb, sd, &strms, &nr_strms);
+    err = do_extract_streams(pdbdata, sb, sd, &strms, &nr_strms);
     free((void *)sd);
     if (err < 0) {
         return err;
@@ -216,17 +213,20 @@ static int extract_streams(
         return -1;
     }
 
-    *streams = strms;
-    *nr_streams = nr_strms;
+    pdb->block_size = sb->block_size;
+    pdb->nr_blocks = sb->num_blocks;
+    pdb->streams = strms;
+    pdb->nr_streams = nr_strms;
+
     return 0;
 }
 
 
 static int parse_pdb_stream(
-    const struct stream *stream,
-    uint32_t *age,
-    unsigned char *guid)
+    struct pdb *pdb,
+    const struct stream *stream)
 {
+    assert(pdb != NULL);
     assert(stream != NULL);
 
     if (stream->size < sizeof(struct pdb_stream_header)) {
@@ -242,8 +242,8 @@ static int parse_pdb_stream(
 
     // TODO: Parse name table
 
-    *age = hdr->age;
-    memcpy(guid, hdr->unique_id, 16);
+    pdb->age = hdr->age;
+    memcpy(pdb->guid.bytes, hdr->unique_id, 16);
 
     return 0;
 }
@@ -251,8 +251,7 @@ static int parse_pdb_stream(
 
 static int parse_dbi_stream(
     struct pdb *pdb,
-    const struct stream *stream,
-    const struct dbi_stream_header **dbi_header)
+    const struct stream *stream)
 {
     if (stream->size < sizeof(struct dbi_stream_header)) {
         /* Malformed PDB - DBI stream too small */
@@ -321,9 +320,18 @@ static int parse_dbi_stream(
         }
     }
 
-    PDB_PRIVATE(pdb)->sm_header = smhdr;
+    if (dbghdr->section_header_data_stream_index == UINT16_MAX) {
+        /* No section header stream */
+        return -1;
+    }
+
+    const struct stream *shdr_stream = &pdb->streams[dbghdr->section_header_data_stream_index];
+    uint32_t nr_sections = shdr_stream->size / sizeof(struct image_section_header);
+
+    pdb->sections = (const struct image_section_header *)shdr_stream->data;
+    pdb->nr_sections = nr_sections;
+    PDB_PRIVATE(pdb)->dbi_header = hdr;
     PDB_PRIVATE(pdb)->dbg_header = dbghdr;
-    *dbi_header = hdr;
 
     return 0;
 }
@@ -336,39 +344,25 @@ static int lookup_rva(const struct pdb *pdb, uint16_t section_idx, uint32_t sect
 
     if (section_idx == 0) {
         /* NULL section index - no translation */
-        puts("a");
         return -1;
     }
     section_idx -= 1;
 
-    const struct debug_header *dbghdr = PDB_PRIVATE(pdb)->dbg_header;
-    if (dbghdr->section_header_data_stream_index == UINT16_MAX) {
-        /* No section header stream - can't translate address */
-        puts("b");
-        return -1;
-    }
-
-    const struct stream *shdr_stream = &pdb->streams[dbghdr->section_header_data_stream_index];
-    uint32_t nr_sections = shdr_stream->size / sizeof(struct image_section_header);
-    if (section_idx >= nr_sections) {
+    if (section_idx >= pdb->nr_sections) {
         fprintf(stderr, "section_idx = %d\n", section_idx);
-        fprintf(stderr, "nr_sections = %d\n", nr_sections);
-        fprintf(stderr, "size = %d\n", shdr_stream->size);
-        fprintf(stderr, "ish_size = %lu\n", sizeof(struct image_section_header));
+        fprintf(stderr, "nr_sections = %d\n", pdb->nr_sections);
 
         /* Invalid section index - no translation */
         return -1;
     }
 
-    const struct image_section_header *shdrs = (const struct image_section_header *)shdr_stream->data;
-    if (section_offset > shdrs[section_idx].misc.virtual_size) {
+    if (section_offset > pdb->sections[section_idx].misc.virtual_size) {
         /* Malformed PDB or invalid offset - address not in section */
-        puts("d");
         return -1;
     }
 
     /* TODO: Check for overflow */
-    *rva = shdrs[section_idx].virtual_address + section_offset;
+    *rva = pdb->sections[section_idx].virtual_address + section_offset;
     return 0;
 }
 
@@ -491,17 +485,17 @@ const struct pdb * pdb_load(const void *pdbdata, size_t len)
         return NULL;
     }
 
-    int err = extract_streams(pdbdata, len, &pdb->streams, &pdb->nr_streams);
+    int err = extract_streams(pdb, pdbdata, len);
     if (err < 0) {
         return NULL;
     }
 
-    err = parse_pdb_stream(&pdb->streams[PDB_STREAM_IDX], &pdb->age, pdb->guid.bytes);
+    err = parse_pdb_stream(pdb, &pdb->streams[PDB_STREAM_IDX]);
     if (err < 0) {
         goto err_close_pdb;
     }
 
-    err = parse_dbi_stream(pdb, &pdb->streams[DBI_STREAM_IDX], &PDB_PRIVATE(pdb)->dbi_header);
+    err = parse_dbi_stream(pdb, &pdb->streams[DBI_STREAM_IDX]);
     if (err < 0) {
         goto err_close_pdb;
     }

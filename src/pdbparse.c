@@ -34,10 +34,13 @@ int print_header(const struct pdb *pdb)
     char sguid[GUID_STR_SIZE + 1] = {0};
     snprintf_guid(sguid, sizeof(sguid), &pdb->guid);
 
-    printf("PDB Header:\n");
-    printf("  %-17s: %u\n", "Number of streams", pdb->nr_streams);
+    puts("PDB Header:");
+    printf("  %-17s: \n", "Magic"); /* TODO: Print magic */
+    printf("  %-17s: %u\n", "Block size", pdb->block_size);
+    printf("  %-17s: %u\n", "Number of blocks", pdb->nr_blocks);
     printf("  %-17s: %s\n", "Guid", sguid);
     printf("  %-17s: %u\n", "Age", pdb->age);
+    printf("  %-17s: %u\n", "Number of streams", pdb->nr_streams);
 
     return 0;
 }
@@ -47,7 +50,22 @@ int print_sections(const struct pdb *pdb)
 {
     assert(pdb != NULL);
 
-    return -1;
+    puts("");
+    puts("Section Headers:");
+    puts("  [Nr] Name      Offset   VirtAddr           FileSiz  MemSiz   Flg");
+
+    for (uint32_t i = 0; i < pdb->nr_sections; i++) {
+        const struct image_section_header *s = &pdb->sections[i];
+        printf("  [%2u] %-8.*s  0x%06x 0x%016x 0x%06x 0x%06x flag\n",
+            i,
+            IMAGE_SIZEOF_SHORT_NAME, s->name,
+            s->pointer_to_raw_data,
+            s->virtual_address,
+            s->size_of_raw_data,
+            s->misc.virtual_size);
+    }
+
+    return 0;
 }
 
 
@@ -128,7 +146,6 @@ int main(int argc, char **argv)
         int option_index = 0;
         int c = getopt_long(argc, argv, "fSshv", long_options, &option_index);
         if (c == -1) {
-            /* TODO: usage */
             break;
         }
 

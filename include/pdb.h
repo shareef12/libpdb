@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define PDB_MAGIC "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
+#define PDB_MAGIC_SZ (32)
+
 struct guid {
     union {
         struct {
@@ -17,6 +20,25 @@ struct guid {
     };
 };
 
+
+#define IMAGE_SIZEOF_SHORT_NAME 8
+
+struct image_section_header {
+    char name[IMAGE_SIZEOF_SHORT_NAME];
+    union {
+        uint32_t physical_address;
+        uint32_t virtual_size;
+    } misc;
+    uint32_t virtual_address;
+    uint32_t size_of_raw_data;
+    uint32_t pointer_to_raw_data;
+    uint32_t pointer_to_relocations;
+    uint32_t pointer_to_line_numbers;
+    uint16_t number_of_relocations;
+    uint16_t number_of_line_numbers;
+    uint32_t characteristics;
+};
+
 struct stream {
     uint32_t index;
     uint32_t size;
@@ -24,13 +46,20 @@ struct stream {
 };
 
 struct pdb {
-    uint32_t nr_streams;
-    const struct stream *streams;
-
-    /* Metadata information from the PDB Stream. This can be used to match this
-       PDB to an executable. */
-    uint32_t age;
+    /* PDB Header Information */
+    const unsigned char magic[PDB_MAGIC_SZ];
+    uint32_t block_size;
+    uint32_t nr_blocks;
     struct guid guid;
+    uint32_t age;
+
+    /* Image section headers (post-optimization) */
+    const struct image_section_header *sections;
+    uint32_t nr_sections;
+
+    /* Raw stream data */
+    const struct stream *streams;
+    uint32_t nr_streams;
 };
 
 struct symbol {

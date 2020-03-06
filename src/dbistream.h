@@ -90,22 +90,4 @@ struct debug_header {
     };
 };
 
-#define IMAGE_SIZEOF_SHORT_NAME 8
-
-struct image_section_header {
-    char name[IMAGE_SIZEOF_SHORT_NAME];
-    union {
-        uint32_t physical_address;
-        uint32_t virtual_size;
-    } misc;
-    uint32_t virtual_address;
-    uint32_t size_of_raw_data;
-    uint32_t pointer_to_raw_data;
-    uint32_t pointer_to_relocations;
-    uint32_t pointer_to_line_numbers;
-    uint16_t number_of_relocations;
-    uint16_t number_of_line_numbers;
-    uint32_t characteristics;
-};
-
 #endif // PDB_DBISTREAM_H
