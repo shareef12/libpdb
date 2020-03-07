@@ -87,13 +87,19 @@ int print_public_symbols(const struct pdb *pdb)
 
     size_t idx = 0;
     while ((sym = pdb_enum_public_symbols(pdb, sym)) != NULL) {
-        /* FIXME: A symbol could have 0 or all of these flags set. Currently, we
-           only properly handle the case where 0 or 1 flag is set. */
-        const char *sym_type = "NOTYPE";
-        if (sym->is_code) sym_type = "CODE";
-        else if (sym->is_function) sym_type = "FUNC";
-        else if (sym->is_managed) sym_type = "MANAGE";
-        else if (sym->is_msil) sym_type = "MSIL";
+        /* TODO: Can a symbol have multiple flags set? */
+        const char *sym_type;
+        switch (sym->flags) {
+        case 0: sym_type = "NOTYPE"; break;
+        case SF_CODE: sym_type = "CODE"; break;
+        case SF_FUNCTION: sym_type = "FUNC"; break;
+        case SF_MANAGED: sym_type = "MANAGE"; break;
+        case SF_MSIL: sym_type = "MSIL"; break;
+        default:
+            fprintf(stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->name, sym->flags);
+            sym_type = "UNK";
+            break;
+        }
 
         printf("%6zu: %016x  %-6s  %s\n", idx, sym->rva, sym_type, sym->name);
         idx++;
@@ -176,7 +182,7 @@ int main(int argc, char **argv)
 
         default:
             fprintf(stderr, PROGRAM_NAME ": Received unknown option: %c\n", c);
-            assert(false);
+            abort();
         }
     }
 

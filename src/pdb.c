@@ -399,7 +399,7 @@ const struct symbol *pdb_enum_public_symbols(const struct pdb *pdb, const struct
     const struct stream *stream = &pdb->streams[symbols_stream_idx];
 
     if (prev != NULL) {
-        uint32_t prev_index = prev->index;
+        uint32_t prev_index = SYMBOL_PRIVATE(prev)->index;
         free((void *)prev);
 
         if (prev_index + sizeof(uint16_t) > stream->size) {
@@ -451,17 +451,18 @@ const struct symbol *pdb_enum_public_symbols(const struct pdb *pdb, const struct
                 // return NULL;
             }
 
-            struct symbol *sym = calloc(1, sizeof(struct symbol) + strlen(cvsym->mangled_name) + 1);
+            struct symbol *sym = calloc(1, sizeof(struct symbol) + sizeof(struct symbol_private) + strlen(cvsym->mangled_name) + 1);
             if (sym == NULL) {
                 return NULL;
             }
 
-            sym->index = next;
-            sym->is_code = (cvsym->flags & CVPSF_CODE) != 0;
-            sym->is_function = (cvsym->flags & CVPSF_FUNCTION) != 0;
-            sym->is_managed = (cvsym->flags & CVPSF_MANAGED) != 0;
-            sym->is_msil = (cvsym->flags & CVPSF_MSIL) != 0;
+            sym->name = (char *)sym + sizeof(struct symbol) + sizeof(struct symbol_private);
             sym->rva = sym_rva;
+            sym->flags |= (cvsym->flags & CVPSF_CODE) ? SF_CODE : 0;
+            sym->flags |= (cvsym->flags & CVPSF_FUNCTION) ? SF_FUNCTION : 0;
+            sym->flags |= (cvsym->flags & CVPSF_MANAGED) ? SF_MANAGED : 0;
+            sym->flags |= (cvsym->flags & CVPSF_MSIL) ? SF_MSIL : 0;
+            SYMBOL_PRIVATE(sym)->index = next;
             strcpy(sym->name, cvsym->mangled_name);
 
             return sym;

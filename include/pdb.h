@@ -62,16 +62,17 @@ struct pdb {
     uint32_t nr_streams;
 };
 
+enum symbol_flags {
+    SF_CODE = 1,
+    SF_FUNCTION = 2,
+    SF_MANAGED = 4,
+    SF_MSIL = 8,
+};
+
 struct symbol {
-    uint32_t index;
-
-    bool is_code;
-    bool is_function;
-    bool is_managed;
-    bool is_msil;
-
+    char *name;
     uint32_t rva;
-    char name[];
+    int flags;
 };
 
 const struct pdb * pdb_open(const char *pdbfile);
