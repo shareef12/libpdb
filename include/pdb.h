@@ -8,6 +8,26 @@
 #define PDB_MAGIC "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 #define PDB_MAGIC_SZ (32)
 
+typedef enum pdb_errno_t {
+    /* General errors */
+    EPDB_SUCCESS = 0,
+    EPDB_SYSTEM_ERROR,
+    EPDB_UNSUPPORTED_VERSION,
+    EPDB_INVALID_PARAMETER,
+    EPDB_NO_MORE_ITEMS,
+
+    /* Errors related to file-format parsing */
+    EPDB_INVALID_SUPERBLOCK = 0x10,
+    EPDB_INVALID_BLOCK_IDX,
+    EPDB_INVALID_STREAM_IDX,
+    EPDB_STREAM_MISSING,
+    EPDB_STREAM_TOO_SMALL,
+
+    /* Errors related to symbols */
+    EPDB_INVALID_SECTION_IDX = 0x20,
+    EPDB_INVALID_SECTION_OFFSET,
+} pdb_errno_t;
+
 struct guid {
     union {
         struct {

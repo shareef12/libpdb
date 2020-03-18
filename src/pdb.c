@@ -7,6 +7,7 @@
 #include "msf.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -36,10 +37,13 @@ static size_t nr_blocks(size_t count, size_t block_size)
 }
 
 
-static int validate_superblock(const struct superblock *sb, size_t len)
+static bool valid_superblock(const struct superblock *sb, size_t len)
 {
+    if (len < sizeof(struct superblock)) {
+        return false;
+    }
+
     bool valid =
-        len > sizeof(struct superblock) &&
         memcmp(sb->file_magic, PDB_MAGIC, PDB_MAGIC_SZ) == 0 &&
         sb->num_blocks > 0 &&
         sb->num_blocks * sb->block_size == len &&
@@ -58,7 +62,7 @@ static int validate_superblock(const struct superblock *sb, size_t len)
             break;
     }
 
-    return valid ? 0 : -1;
+    return valid;
 }
 
 
@@ -81,6 +85,7 @@ static int extract_stream_directory(
     /* Allocate memory in a multiple of block_size to simplify copying */
     unsigned char *sd = calloc(sb->block_size, nr_sd_blocks);
     if (sd == NULL) {
+        errno = ENOMEM;
         return -1;
     }
 
@@ -142,6 +147,7 @@ static int do_extract_streams(
 
     struct stream *strms = calloc(1, total_sz);
     if (strms == NULL) {
+        errno = ENOMEM;
         return -1;
     }
 
@@ -187,7 +193,7 @@ static int extract_streams(
     assert(pdbdata != NULL);
 
     const struct superblock *sb = (struct superblock *)pdbdata;
-    int err = validate_superblock(sb, len);
+    int err = valid_superblock(sb, len);
     if (err < 0) {
         return err;
     }
@@ -349,9 +355,6 @@ static int lookup_rva(const struct pdb *pdb, uint16_t section_idx, uint32_t sect
     section_idx -= 1;
 
     if (section_idx >= pdb->nr_sections) {
-        fprintf(stderr, "section_idx = %d\n", section_idx);
-        fprintf(stderr, "nr_sections = %d\n", pdb->nr_sections);
-
         /* Invalid section index - no translation */
         return -1;
     }
