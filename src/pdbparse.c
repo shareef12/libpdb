@@ -85,6 +85,61 @@ int print_public_symbols(const struct pdb *pdb)
     printf("Public stream contains %zu symbols:\n", nr_syms);
     puts("   Num:    Value          Type    Name");
 
+
+
+    /*
+    const struct cv_public_symbol *cvsym = (const struct cv_public_symbol *)cvhdr;
+
+            uint32_t sym_rva = 0;
+            int err = lookup_rva(pdb, cvsym->section_idx, cvsym->section_offset, &sym_rva);
+            if (err < 0) {*/
+                /* Invalid section_idx */
+                /*
+                 * TODO: For some reason there are a few symbols that have an invalid section_idx.
+                 *  They all have the same idx, one past the end of the sections array. There are
+                 *  27 ntos sections, and they all have idx=28, so after subtracting 1, they are
+                 *  section_idx == nr_sections, which would cause an overflow.
+                 *
+                 * WARNING: Invalid section index for symbol: __guard_flags idx=28 offset=0x1011c500
+                 * WARNING: Invalid section index for symbol: __guard_longjmp_count idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __ppe_base idx=28 offset=0x7da00000
+                 * WARNING: Invalid section index for symbol: __pxe_top idx=28 offset=0x7dbedfff
+                 * WARNING: Invalid section index for symbol: __pte_base idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __pde_base idx=28 offset=0x40000000
+                 * WARNING: Invalid section index for symbol: __pxe_selfmap idx=28 offset=0x7dbedf68
+                 * WARNING: Invalid section index for symbol: __mm_pfn_database idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __pxe_base idx=28 offset=0x7dbed000
+                 * WARNING: Invalid section index for symbol: __guard_fids_count idx=28 offset=0x17c7
+                 * WARNING: Invalid section index for symbol: __guard_iat_count idx=28 offset=0x2
+                 * WARNING: Invalid section index for symbol: __guard_longjmp_table idx=28 offset=0x0
+                 * WARNING: Invalid section index for symbol: __pte_top idx=28 offset=0xffffffff
+                 * WARNING: Invalid section index for symbol: __pde_top idx=28 offset=0x7fffffff
+                 *//*
+                fprintf(stderr, "WARNING: Invalid section index for symbol: %s idx=%d offset=0x%x\n",
+                    cvsym->mangled_name, cvsym->section_idx, cvsym->section_offset);
+                // return NULL;
+            }
+
+            struct symbol *sym = calloc(1, sizeof(struct symbol) + sizeof(struct symbol_private) + strlen(cvsym->mangled_name) + 1);
+            if (sym == NULL) {
+                return NULL;
+            }
+
+            sym->name = (char *)sym + sizeof(struct symbol) + sizeof(struct symbol_private);
+            sym->rva = sym_rva;
+            sym->flags |= (cvsym->flags & CVPSF_CODE) ? SF_CODE : 0;
+            sym->flags |= (cvsym->flags & CVPSF_FUNCTION) ? SF_FUNCTION : 0;
+            sym->flags |= (cvsym->flags & CVPSF_MANAGED) ? SF_MANAGED : 0;
+            sym->flags |= (cvsym->flags & CVPSF_MSIL) ? SF_MSIL : 0;
+            SYMBOL_PRIVATE(sym)->index = next;
+            strcpy(sym->name, cvsym->mangled_name);
+
+            return sym;
+            */
+
+
+
+
     size_t idx = 0;
     while ((sym = pdb_enum_public_symbols(pdb, sym)) != NULL) {
         /* TODO: Can a symbol have multiple flags set? */
@@ -106,6 +161,50 @@ int print_public_symbols(const struct pdb *pdb)
     }
 
     return 0;
+}
+
+
+
+const struct pdb * pdb_open(const char *pdbfile)
+{
+    assert(pdbfile != NULL);
+    assert(pdbfile > 0);
+
+    int fd = open(pdbfile, O_RDONLY);
+    if (fd < 0) {
+        return NULL;
+    }
+
+    struct stat sb = {0};
+    int err = fstat(fd, &sb);
+    if (err < 0) {
+        close(fd);
+        return NULL;
+    }
+
+    const void *ptr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (ptr == MAP_FAILED) {
+        close(fd);
+        return NULL;
+    }
+    close(fd);
+
+    const struct pdb *pdb = pdb_load(ptr, sb.st_size);
+    munmap((void *)ptr, sb.st_size);
+
+    return pdb;
+}
+
+
+void pdb_close(const struct pdb *pdb)
+{
+    assert(pdb != NULL);
+
+    if (pdb->streams != NULL) {
+        free((void *)pdb->streams);
+    }
+
+    free((void *)pdb);
 }
 
 

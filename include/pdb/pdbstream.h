@@ -21,6 +21,6 @@ struct pdb_stream_header {
     uint32_t signature;
     uint32_t age;
     unsigned char unique_id[16];
-};
+} __attribute__((packed));
 
 #endif // PDB_PDBSTREAM_H
