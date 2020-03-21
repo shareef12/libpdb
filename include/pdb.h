@@ -1,30 +1,23 @@
 #ifndef PDB_H
 #define PDB_H
 
+#include "pdb/codeview.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define PDB_MAGIC "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
-#define PDB_MAGIC_SZ (32)
+#define PDB_SIGNATURE_SZ (32)
 
 typedef enum pdb_errno_t {
-    /* General errors */
     EPDB_SUCCESS = 0,
+    EPDB_NO_PDB_LOADED,
     EPDB_SYSTEM_ERROR,
-    EPDB_UNSUPPORTED_VERSION,
     EPDB_INVALID_PARAMETER,
-    EPDB_NO_MORE_ITEMS,
+    EPDB_UNSUPPORTED_VERSION,
+    EPDB_FILE_CORRUPT,
 
-    /* Errors related to file-format parsing */
-    EPDB_INVALID_SUPERBLOCK = 0x10,
-    EPDB_INVALID_BLOCK_IDX,
-    EPDB_INVALID_STREAM_IDX,
-    EPDB_STREAM_MISSING,
-    EPDB_STREAM_TOO_SMALL,
-
-    /* Errors related to symbols */
-    EPDB_INVALID_SECTION_IDX = 0x20,
+    EPDB_INVALID_SECTION_IDX,
     EPDB_INVALID_SECTION_OFFSET,
 } pdb_errno_t;
 
@@ -35,11 +28,10 @@ struct guid {
             uint16_t data2;
             uint16_t data3;
             unsigned char data4[8];
-        };
+        } __attribute__((packed));
         unsigned char bytes[16];
     };
-};
-
+} __attribute__((packed));
 
 #define IMAGE_SIZEOF_SHORT_NAME 8
 
@@ -57,52 +49,74 @@ struct image_section_header {
     uint16_t number_of_relocations;
     uint16_t number_of_line_numbers;
     uint32_t characteristics;
-};
+} __attribute__((packed));
 
-struct stream {
-    uint32_t index;
-    uint32_t size;
-    const unsigned char *data;
-};
+typedef void * (*malloc_fn)(size_t size);
+typedef void (*free_fn)(void *ptr);
 
-struct pdb {
-    /* PDB Header Information */
-    const unsigned char magic[PDB_MAGIC_SZ];
-    uint32_t block_size;
-    uint32_t nr_blocks;
-    struct guid guid;
-    uint32_t age;
+/* TODO:
+ *
+ * New APIs
+ *  - API for looking up a symbol in the hashtable
+ *  - API for file-based IO to reduce memory usage?
+ *      - Memory-reduced mode where we extract streams on demand?
+ *  - API set for writing PDBs?
+ *
+ * New Features
+ *  - Name demangling
+ *  - Download files from a symbol server
+ *  - Support for weird systems (preprocessor defines for using stuff like assert, errno, libcurl, fprintf, fread, etc. Also endianness...)
+ *
+ * Error Handling
+ *  - PDB_ENABLE_ASSERTIONS support in build systems
+ *  - Need additional checking in parse_symbol_stream for checking the contents of symbols (public and otherwise)
+ *  - Need to add integer overflow detection in stream extraction
+ *
+ * Other
+ *  - Implement hashtable parsing and searching
+ *
+ *  - Unit tests
+ *  - Fuzzing
+ *  - Packaging
+ *  - Documentation
+ */
 
-    /* Image section headers (post-optimization) */
-    const struct image_section_header *sections;
-    uint32_t nr_sections;
+bool pdb_sig_match(void *data, size_t len);
 
-    /* Raw stream data */
-    const struct stream *streams;
-    uint32_t nr_streams;
-};
+void * pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn);
+void pdb_reset_context(void *context);
+void pdb_destroy_context(void *context);
 
-enum symbol_flags {
-    SF_CODE = 1,
-    SF_FUNCTION = 2,
-    SF_MANAGED = 4,
-    SF_MSIL = 8,
-};
+int pdb_load(void *context, const void *pdbdata, size_t len);
 
-struct symbol {
-    char *name;
-    uint32_t rva;
-    int flags;
-};
 
-const struct pdb * pdb_open(const char *pdbfile);
+void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_streams);
+uint32_t pdb_get_block_size(void *context);
+uint32_t pdb_get_nr_blocks(void *context);
+const struct guid * pdb_get_guid(void *context);
+uint32_t pdb_get_age(void *context);
+uint32_t pdb_get_nr_streams(void *context);
 
-const struct pdb * pdb_load(const void *pdbdata, size_t len);
+const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size);
 
-void pdb_close(const struct pdb *pdb);
+uint32_t pdb_get_nr_sections(void *context);
+const struct image_section_header * pdb_get_sections(void *context);
 
-const struct symbol * pdb_lookup_public_symbol(const struct pdb *pdb, const char *name);
+/* Iterate only through public symbols */
+int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols);
+int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbols);
 
-const struct symbol * pdb_enum_public_symbols(const struct pdb *pdb, const struct symbol *prev);
+/* Iterate through *all* symbols (public + global) */
+int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
+int pdb_get_symbols(void *context, const struct cv_record_header **symbols);
+
+/* Find a symbol by looking it up in the PDB symbol hashtable */
+/* const struct cv_public_symbol * pdb_lookup_public_symbol(void *context, const char *mangled_name); */
+/* const struct cv_global_symbol * pdb_lookup_global_symbol(void *context, const char *mangled_name); */
+
+int pdb_convert_section_offset_to_rva(void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
+
+pdb_errno_t pdb_errno(void *context);
+char * pdb_strerror(void *context);
 
 #endif // PDB_H

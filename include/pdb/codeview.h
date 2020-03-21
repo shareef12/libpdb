@@ -15,7 +15,7 @@ enum cv_public_symbol_flags {
 struct cv_record_header {
     uint16_t record_len;  // Record length, not including this 2 byte field.
     uint16_t record_kind; // Record kind enum.
-};
+} __attribute__((packed));
 
 struct cv_public_symbol {
     struct cv_record_header header;
@@ -23,6 +23,6 @@ struct cv_public_symbol {
     uint32_t section_offset;
     uint16_t section_idx;
     const char mangled_name[];
-};
+} __attribute__((packed));
 
 #endif // PDB_CODEVIEW_H

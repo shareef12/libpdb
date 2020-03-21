@@ -40,7 +40,7 @@ struct dbi_stream_header {
     uint16_t flags;
     uint16_t machine;
     uint32_t padding;
-};
+} __attribute__((packed));
 
 enum section_map_entry_flags {
     SMEF_READ = 1 << 0,
@@ -61,13 +61,13 @@ struct section_map_entry {
     uint16_t class_name;
     uint32_t offset;
     uint32_t section_length;
-};
+} __attribute__((packed));
 
 struct section_map_header {
     uint16_t count;
     uint16_t log_count;
     const struct section_map_entry entries[];
-};
+} __attribute__((packed));
 
 #define DBI_NUM_DEBUG_HEADER_STREAMS 11
 
@@ -85,9 +85,9 @@ struct debug_header {
             uint16_t pdata_stream_index;
             uint16_t new_fpo_data_stream_index;
             uint16_t original_section_header_data_stream_index;
-        };
+        } __attribute__((packed));
         uint16_t streams[DBI_NUM_DEBUG_HEADER_STREAMS];
     };
-};
+} __attribute__((packed));
 
 #endif // PDB_DBISTREAM_H
