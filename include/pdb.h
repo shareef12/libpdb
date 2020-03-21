@@ -68,7 +68,6 @@ typedef void (*free_fn)(void *ptr);
  *  - Support for weird systems (preprocessor defines for using stuff like assert, errno, libcurl, fprintf, fread, etc. Also endianness...)
  *
  * Error Handling
- *  - PDB_ENABLE_ASSERTIONS support in build systems
  *  - Need additional checking in parse_symbol_stream for checking the contents of symbols (public and otherwise)
  *  - Need to add integer overflow detection in stream extraction
  *
