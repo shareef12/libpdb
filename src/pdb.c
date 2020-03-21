@@ -40,11 +40,14 @@
  */
 #if defined(PDB_ENABLE_ASSERTIONS) && !defined(NDEBUG)
 
+#define PDB_ASSERT(expr) assert(expr)
 #define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) assert((ctx) != NULL)
 #define PDB_ASSERT_PDB_LOADED(ctx, retval) assert((ctx)->pdb_loaded)
 #define PDB_ASSERT_PARAMETER(ctx, expr, retval) assert(expr)
 
 #else
+
+#define PDB_ASSERT(expr)
 
 #define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) do {       \
         if ((ctx) == NULL) {                            \
@@ -69,7 +72,6 @@
 #endif // PDB_ENABLE_ASSERTIONS
 
 struct stream {
-    uint32_t index;
     uint32_t size;
     const unsigned char *data;
 };
@@ -94,13 +96,13 @@ struct pdb_context {
     uint32_t age;
 
     /* Image section headers (post-optimization) */
-    struct image_section_header *sections;
+    const struct image_section_header *sections;
     uint32_t nr_sections;
 
     /* Cached symbol information */
     bool symbol_stream_parsed;
-    size_t nr_symbols;
-    size_t nr_public_symbols;
+    uint32_t nr_symbols;
+    uint32_t nr_public_symbols;
 
     /* Cached DBI stream info - this stream contains useful stream indices */
     const struct dbi_stream_header *dbi_header;
@@ -108,7 +110,7 @@ struct pdb_context {
 };
 
 
-static void pdb_initialize_context(struct pdb_context *ctx, malloc_fn user_malloc_fn, free_fn user_free_fn)
+static void initialize_pdb_context(struct pdb_context *ctx, malloc_fn user_malloc_fn, free_fn user_free_fn)
 {
     memset(ctx, 0, sizeof(*ctx));
 
@@ -121,7 +123,7 @@ static void pdb_initialize_context(struct pdb_context *ctx, malloc_fn user_mallo
 }
 
 
-static void pdb_cleanup_context(struct pdb_context *ctx)
+static void cleanup_pdb_context(struct pdb_context *ctx)
 {
     ctx->free((void *)ctx->streams);
 }
@@ -129,6 +131,7 @@ static void pdb_cleanup_context(struct pdb_context *ctx)
 
 static size_t nr_blocks(size_t count, size_t block_size)
 {
+    PDB_ASSERT(block_size != 0);
     if (count == 0) {
         return 0;
     }
@@ -251,7 +254,6 @@ static int do_extract_streams(
     const uint32_t *stream_blocks = stream_sizes + sd->num_streams;
     unsigned char *next_stream_data = (unsigned char *)(strms + sd->num_streams);
     for (uint32_t i = 0; i < sd->num_streams; i++) {
-        strms[i].index = i;
         strms[i].size = stream_sizes[i];
         strms[i].data = next_stream_data;
 
@@ -467,8 +469,8 @@ static int parse_symbol_stream(struct pdb_context *ctx)
     }
 
     const struct stream *stream = &ctx->streams[symbols_stream_idx];
-    size_t nr_symbols = 0;
-    size_t nr_public_symbols = 0;
+    uint32_t nr_symbols = 0;
+    uint32_t nr_public_symbols = 0;
     uint32_t idx = 0;
 
     while (idx < stream->size) {
@@ -512,20 +514,50 @@ static int parse_symbol_stream(struct pdb_context *ctx)
 }
 
 
+void get_symbols(struct pdb_context *ctx, const struct cv_record_header **symbols, bool public_only)
+{
+    PDB_ASSERT(ctx->symbol_stream_parsed);
+
+    /* parse_symbol_stream has already performed symbol stream validation */
+    uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
+    const struct stream *stream = &ctx->streams[symbols_stream_idx];
+
+    uint32_t idx = 0;
+    for (size_t i = 0, j = 0; i < ctx->nr_symbols; i++) {
+        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
+        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
+
+        if (public_only) {
+            if (cvhdr->record_kind == S_PUB32) {
+                symbols[j++] =cvhdr;
+            }
+        }
+        else {
+            symbols[j++] = cvhdr;
+        }
+
+        idx += symbol_sz;
+    }
+}
+
+
 bool pdb_sig_match(void *data, size_t len)
 {
-    return memcmp(data, PDB_SIGNATURE, min(len, PDB_SIGNATURE_SZ));
+    return memcmp(data, PDB_SIGNATURE, min(len, PDB_SIGNATURE_SZ)) == 0;
 }
 
 
 void * pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn)
 {
+    user_malloc_fn = user_malloc_fn ? user_malloc_fn : malloc;
+    user_free_fn = user_free_fn ? user_free_fn : free;
+
     struct pdb_context *ctx = user_malloc_fn(sizeof(struct pdb_context));
     if (ctx == NULL) {
         return NULL;
     }
 
-    pdb_initialize_context(ctx, user_malloc_fn, user_free_fn);
+    initialize_pdb_context(ctx, user_malloc_fn, user_free_fn);
 
     return ctx;
 }
@@ -538,8 +570,8 @@ void pdb_reset_context(void *context)
         return;
     }
 
-    pdb_cleanup_context(ctx);
-    pdb_initialize_context(ctx, ctx->malloc, ctx->free);
+    cleanup_pdb_context(ctx);
+    initialize_pdb_context(ctx, ctx->malloc, ctx->free);
 }
 
 
@@ -550,7 +582,7 @@ void pdb_destroy_context(void *context)
         return;
     }
 
-    pdb_cleanup_context(ctx);
+    cleanup_pdb_context(ctx);
     ctx->free(ctx);
 }
 
@@ -561,6 +593,10 @@ int pdb_load(void *context, const void *pdbdata, size_t len)
 
     PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, pdbdata != NULL && len > 0);
+
+    if (ctx->pdb_loaded) {
+        pdb_reset_context(context);
+    }
 
     if (extract_streams(ctx, pdbdata, len) < 0) {
         return -1;
@@ -577,21 +613,29 @@ int pdb_load(void *context, const void *pdbdata, size_t len)
     /* TODO: Parse TPI stream */
     /* TODO: parse IPI stream */
 
+    ctx->pdb_loaded = true;
+
     return 0;
 }
 
 
-void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_sections, uint32_t *nr_streams)
+void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_streams)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
-    /* TODO: How do we assert/validate context and params without a return value? */
+    if (ctx == NULL || !ctx->pdb_loaded ||
+        block_size == NULL ||
+        nr_blocks == NULL ||
+        guid == NULL ||
+        age == NULL ||
+        nr_streams == NULL) {
+        return;
+    }
 
     *block_size = ctx->block_size;
     *nr_blocks = ctx->nr_blocks;
     *guid = &ctx->guid;
     *age = ctx->age;
-    *nr_sections = ctx->nr_sections;
     *nr_streams = ctx->nr_streams;
 }
 
@@ -651,20 +695,47 @@ uint32_t pdb_get_nr_streams(void *context)
 }
 
 
-const struct image_section_header * pdb_get_sections(void *context, uint32_t *nr_sections)
+const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
     PDB_ASSERT_CTX_NOT_NULL(ctx, NULL);
     PDB_ASSERT_PDB_LOADED(ctx, NULL);
-    PDB_ASSERT_PARAMETER(ctx, NULL, nr_sections != NULL);
+    PDB_ASSERT_PARAMETER(ctx, NULL, stream_size != NULL);
 
-    *nr_sections = ctx->nr_sections;
+    if (stream_idx >= ctx->nr_streams) {
+        ctx->error = EPDB_INVALID_PARAMETER;
+        return NULL;
+    }
+
+    *stream_size = ctx->streams[stream_idx].size;
+    return ctx->streams[stream_idx].data;
+}
+
+
+uint32_t pdb_get_nr_sections(void *context)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+
+    PDB_ASSERT_CTX_NOT_NULL(ctx, 0);
+    PDB_ASSERT_PDB_LOADED(ctx, 0);
+
+    return ctx->nr_sections;
+}
+
+
+const struct image_section_header * pdb_get_sections(void *context)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+
+    PDB_ASSERT_CTX_NOT_NULL(ctx, NULL);
+    PDB_ASSERT_PDB_LOADED(ctx, NULL);
+
     return ctx->sections;
 }
 
 
-int pdb_get_nr_public_symbols(void *context, size_t *nr_public_symbols)
+int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -693,40 +764,13 @@ int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbol
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
-    size_t nr_symbols = 0;
-    int err = pdb_get_nr_symbols(ctx, &nr_symbols);
-    if (err < 0) {
-        return -1;
-    }
-
-    size_t nr_public_symbols = 0;
-    err = pdb_get_nr_public_symbols(ctx, &nr_public_symbols);
-    if (err < 0) {
-        return -1;
-    }
-
-    /* pdb_get_nr_public_symbols has already performed symbol stream validation */
-    uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
-    const struct stream *stream = &ctx->streams[symbols_stream_idx];
-
-    uint32_t idx = 0;
-    for (size_t i = 0, j = 0; i < nr_symbols && j < nr_public_symbols; i++, j++) {
-        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
-        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
-
-        if (cvhdr->record_kind == S_PUB32) {
-            symbols[j] = (const struct cv_public_symbol *)cvhdr;
-            j++;
-        }
-
-        idx += symbol_sz;
-    }
+    get_symbols(ctx, (const struct cv_record_header **)symbols, true);
 
     return 0;
 }
 
 
-int pdb_get_nr_symbols(void *context, size_t *nr_symbols)
+int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -756,25 +800,7 @@ int pdb_get_symbols(void *context, const struct cv_record_header **symbols)
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
-    size_t nr_symbols = 0;
-    int err = pdb_get_nr_symbols(ctx, &nr_symbols);
-    if (err < 0) {
-        return -1;
-    }
-
-    /* pdb_get_nr_symbols has already performed symbol stream validation */
-    uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
-    const struct stream *stream = &ctx->streams[symbols_stream_idx];
-
-    uint32_t idx = 0;
-    for (size_t i = 0; i < nr_symbols; i++) {
-        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
-        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
-
-        symbols[i] = cvhdr;
-
-        idx += symbol_sz;
-    }
+    get_symbols(ctx, symbols, false);
 
     return 0;
 }

@@ -1,7 +1,10 @@
-#include <assert.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "pdb.h"
@@ -27,35 +30,96 @@ int snprintf_guid(char *str, size_t size, const struct guid *guid)
 }
 
 
-int print_header(const struct pdb *pdb)
+void * open_pdb_file(const char *pathname)
 {
-    assert(pdb != NULL);
+    int fd = open(pathname, O_RDONLY);
+    if (fd < 0) {
+        fprintf(stderr, "Error opening pdb file: %m\n");
+        return NULL;
+    }
 
-    char sguid[GUID_STR_SIZE + 1] = {0};
-    snprintf_guid(sguid, sizeof(sguid), &pdb->guid);
+    struct stat sb = {0};
+    int err = fstat(fd, &sb);
+    if (err < 0) {
+        fprintf(stderr, "Error getting pdb file size: %m\n");
+        close(fd);
+        return NULL;
+    }
 
-    puts("PDB Header:");
-    printf("  %-17s: \n", "Magic"); /* TODO: Print magic */
-    printf("  %-17s: %u\n", "Block size", pdb->block_size);
-    printf("  %-17s: %u\n", "Number of blocks", pdb->nr_blocks);
-    printf("  %-17s: %s\n", "Guid", sguid);
-    printf("  %-17s: %u\n", "Age", pdb->age);
-    printf("  %-17s: %u\n", "Number of streams", pdb->nr_streams);
+    void *pdbdata = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (pdbdata == MAP_FAILED) {
+        fprintf(stderr, "Error mapping pdb file: %m\n");
+        return NULL;
+    }
+
+    if (!pdb_sig_match(pdbdata, sb.st_size)) {
+        fprintf(stderr, "Not a pdb file: %s\n", pathname);
+        goto err_munmap_pdbdata;
+    }
+
+    void *ctx = pdb_create_context(NULL, NULL);
+    if (ctx == NULL) {
+        fprintf(stderr, "Could not allocate libpdb context\n");
+        goto err_munmap_pdbdata;
+    }
+
+    if (pdb_load(ctx, pdbdata, sb.st_size) < 0) {
+        fprintf(stderr, "Error loading pdb file: %s\n", pdb_strerror(ctx));
+        goto err_destroy_ctx;
+    }
+
+    munmap(pdbdata, sb.st_size);
+    return ctx;
+
+err_destroy_ctx:
+    pdb_destroy_context(ctx);
+
+err_munmap_pdbdata:
+    munmap(pdbdata, sb.st_size);
 
     return 0;
 }
 
 
-int print_sections(const struct pdb *pdb)
+void close_pdb_file(void *pdb_context)
 {
-    assert(pdb != NULL);
+    pdb_destroy_context(pdb_context);
+}
+
+
+void print_header(void *pdb)
+{
+    uint32_t block_size = 0;
+    uint32_t nr_blocks = 0;
+    const struct guid *guid = NULL;
+    uint32_t age = 0;
+    uint32_t nr_streams = 0;
+    char sguid[GUID_STR_SIZE + 1] = {0};
+
+    pdb_get_header(pdb, &block_size, &nr_blocks, &guid, &age, &nr_streams);
+    snprintf_guid(sguid, sizeof(sguid), guid);
+
+    puts("PDB Header:");
+    printf("  %-17s: %u\n", "Block size", block_size);
+    printf("  %-17s: %u\n", "Number of blocks", nr_blocks);
+    printf("  %-17s: %s\n", "Guid", sguid);
+    printf("  %-17s: %u\n", "Age", age);
+    printf("  %-17s: %u\n", "Number of streams", nr_streams);
+}
+
+
+void print_sections(void *pdb)
+{
+    uint32_t nr_sections = pdb_get_nr_sections(pdb);
+    const struct image_section_header *sections = pdb_get_sections(pdb);
 
     puts("");
     puts("Section Headers:");
     puts("  [Nr] Name      Offset   VirtAddr           FileSiz  MemSiz   Flg");
 
-    for (uint32_t i = 0; i < pdb->nr_sections; i++) {
-        const struct image_section_header *s = &pdb->sections[i];
+    for (uint32_t i = 0; i < nr_sections; i++) {
+        const struct image_section_header *s = &sections[i];
         printf("  [%2u] %-8.*s  0x%06x 0x%016x 0x%06x 0x%06x flag\n",
             i,
             IMAGE_SIZEOF_SHORT_NAME, s->name,
@@ -64,151 +128,82 @@ int print_sections(const struct pdb *pdb)
             s->size_of_raw_data,
             s->misc.virtual_size);
     }
-
-    return 0;
 }
 
 
-int print_public_symbols(const struct pdb *pdb)
+void print_public_symbols(void *pdb)
 {
-    assert(pdb != NULL);
+    uint32_t nr_symbols = 0;
+    if (pdb_get_nr_public_symbols(pdb, &nr_symbols) < 0) {
+        fprintf(stderr, "Error parsing symbol stream: %s\n", pdb_strerror(pdb));
+        return;
+    }
 
-    /* Not the most efficient, but there is no way to know how many public
-       symbols there are without iterating through them all */
-    size_t nr_syms = 0;
-    const struct symbol *sym = NULL;
-    while ((sym = pdb_enum_public_symbols(pdb, sym)) != NULL) {
-        nr_syms++;
+    const struct cv_public_symbol **symbols = calloc(nr_symbols, sizeof(void *));
+    if (symbols == NULL) {
+        fprintf(stderr, "Couldn't allocate memory for %d symbols\n", nr_symbols);
+        return;
+    }
+
+    if (pdb_get_public_symbols(pdb, symbols) < 0) {
+        fprintf(stderr, "Error getting symbols: %s\n", pdb_strerror(pdb));
+        return;
     }
 
     puts("");
-    printf("Public stream contains %zu symbols:\n", nr_syms);
+    printf("Public stream contains %u symbols:\n", nr_symbols);
     puts("   Num:    Value          Type    Name");
 
+    for (uint32_t i = 0; i < nr_symbols; i++) {
+        const struct cv_public_symbol *sym = symbols[i];
 
-
-    /*
-    const struct cv_public_symbol *cvsym = (const struct cv_public_symbol *)cvhdr;
-
-            uint32_t sym_rva = 0;
-            int err = lookup_rva(pdb, cvsym->section_idx, cvsym->section_offset, &sym_rva);
-            if (err < 0) {*/
-                /* Invalid section_idx */
-                /*
-                 * TODO: For some reason there are a few symbols that have an invalid section_idx.
-                 *  They all have the same idx, one past the end of the sections array. There are
-                 *  27 ntos sections, and they all have idx=28, so after subtracting 1, they are
-                 *  section_idx == nr_sections, which would cause an overflow.
-                 *
-                 * WARNING: Invalid section index for symbol: __guard_flags idx=28 offset=0x1011c500
-                 * WARNING: Invalid section index for symbol: __guard_longjmp_count idx=28 offset=0x0
-                 * WARNING: Invalid section index for symbol: __ppe_base idx=28 offset=0x7da00000
-                 * WARNING: Invalid section index for symbol: __pxe_top idx=28 offset=0x7dbedfff
-                 * WARNING: Invalid section index for symbol: __pte_base idx=28 offset=0x0
-                 * WARNING: Invalid section index for symbol: __pde_base idx=28 offset=0x40000000
-                 * WARNING: Invalid section index for symbol: __pxe_selfmap idx=28 offset=0x7dbedf68
-                 * WARNING: Invalid section index for symbol: __mm_pfn_database idx=28 offset=0x0
-                 * WARNING: Invalid section index for symbol: __pxe_base idx=28 offset=0x7dbed000
-                 * WARNING: Invalid section index for symbol: __guard_fids_count idx=28 offset=0x17c7
-                 * WARNING: Invalid section index for symbol: __guard_iat_count idx=28 offset=0x2
-                 * WARNING: Invalid section index for symbol: __guard_longjmp_table idx=28 offset=0x0
-                 * WARNING: Invalid section index for symbol: __pte_top idx=28 offset=0xffffffff
-                 * WARNING: Invalid section index for symbol: __pde_top idx=28 offset=0x7fffffff
-                 *//*
-                fprintf(stderr, "WARNING: Invalid section index for symbol: %s idx=%d offset=0x%x\n",
-                    cvsym->mangled_name, cvsym->section_idx, cvsym->section_offset);
-                // return NULL;
-            }
-
-            struct symbol *sym = calloc(1, sizeof(struct symbol) + sizeof(struct symbol_private) + strlen(cvsym->mangled_name) + 1);
-            if (sym == NULL) {
-                return NULL;
-            }
-
-            sym->name = (char *)sym + sizeof(struct symbol) + sizeof(struct symbol_private);
-            sym->rva = sym_rva;
-            sym->flags |= (cvsym->flags & CVPSF_CODE) ? SF_CODE : 0;
-            sym->flags |= (cvsym->flags & CVPSF_FUNCTION) ? SF_FUNCTION : 0;
-            sym->flags |= (cvsym->flags & CVPSF_MANAGED) ? SF_MANAGED : 0;
-            sym->flags |= (cvsym->flags & CVPSF_MSIL) ? SF_MSIL : 0;
-            SYMBOL_PRIVATE(sym)->index = next;
-            strcpy(sym->name, cvsym->mangled_name);
-
-            return sym;
-            */
-
-
-
-
-    size_t idx = 0;
-    while ((sym = pdb_enum_public_symbols(pdb, sym)) != NULL) {
         /* TODO: Can a symbol have multiple flags set? */
         const char *sym_type;
         switch (sym->flags) {
         case 0: sym_type = "NOTYPE"; break;
-        case SF_CODE: sym_type = "CODE"; break;
-        case SF_FUNCTION: sym_type = "FUNC"; break;
-        case SF_MANAGED: sym_type = "MANAGE"; break;
-        case SF_MSIL: sym_type = "MSIL"; break;
+        case CVPSF_CODE: sym_type = "CODE"; break;
+        case CVPSF_FUNCTION: sym_type = "FUNC"; break;
+        case CVPSF_MANAGED: sym_type = "MANAGE"; break;
+        case CVPSF_MSIL: sym_type = "MSIL"; break;
         default:
-            fprintf(stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->name, sym->flags);
+            fprintf(stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->mangled_name, sym->flags);
             sym_type = "UNK";
             break;
         }
 
-        printf("%6zu: %016x  %-6s  %s\n", idx, sym->rva, sym_type, sym->name);
-        idx++;
-    }
+        uint32_t sym_rva = 0;
+        if (pdb_convert_section_offset_to_rva(pdb, sym->section_idx, sym->section_offset, &sym_rva) < 0) {
+            /*
+            * TODO: For some reason there are a few symbols that have an invalid section_idx.
+            *  They all have the same idx, one past the end of the sections array. There are
+            *  27 ntos sections, and they all have idx=28, so after subtracting 1, they are
+            *  section_idx == nr_sections, which would cause an overflow.
+            *
+            * WARNING: No RVA translation for symbol: __guard_flags (idx=0x1c offset=0x1011c500): (null)
+            * WARNING: No RVA translation for symbol: __guard_longjmp_count (idx=0x1c offset=0x0): (null)
+            * WARNING: No RVA translation for symbol: __ppe_base (idx=0x1c offset=0x7da00000): (null)
+            * WARNING: No RVA translation for symbol: __pxe_top (idx=0x1c offset=0x7dbedfff): (null)
+            * WARNING: No RVA translation for symbol: __pte_base (idx=0x1c offset=0x0): (null)
+            * WARNING: No RVA translation for symbol: __pde_base (idx=0x1c offset=0x40000000): (null)
+            * WARNING: No RVA translation for symbol: __pxe_selfmap (idx=0x1c offset=0x7dbedf68): (null)
+            * WARNING: No RVA translation for symbol: __mm_pfn_database (idx=0x1c offset=0x0): (null)
+            * WARNING: No RVA translation for symbol: __pxe_base (idx=0x1c offset=0x7dbed000): (null)
+            * WARNING: No RVA translation for symbol: __guard_fids_count (idx=0x1c offset=0x180d): (null)
+            * WARNING: No RVA translation for symbol: __guard_iat_count (idx=0x1c offset=0x2): (null)
+            * WARNING: No RVA translation for symbol: __guard_longjmp_table (idx=0x1c offset=0x0): (null)
+            * WARNING: No RVA translation for symbol: __pte_top (idx=0x1c offset=0xffffffff): (null)
+            * WARNING: No RVA translation for symbol: __pde_top (idx=0x1c offset=0x7fffffff): (null)
+            */
+            fprintf(stderr, "WARNING: No RVA translation for symbol: %s (idx=0x%x offset=0x%x): %s\n",
+                sym->mangled_name, sym->section_idx, sym->section_offset, pdb_strerror(pdb));
+        }
 
-    return 0;
+        printf("%6u: %016x  %-6s  %s\n", i, sym_rva, sym_type, sym->mangled_name);
+    }
 }
 
 
-
-const struct pdb * pdb_open(const char *pdbfile)
-{
-    assert(pdbfile != NULL);
-    assert(pdbfile > 0);
-
-    int fd = open(pdbfile, O_RDONLY);
-    if (fd < 0) {
-        return NULL;
-    }
-
-    struct stat sb = {0};
-    int err = fstat(fd, &sb);
-    if (err < 0) {
-        close(fd);
-        return NULL;
-    }
-
-    const void *ptr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (ptr == MAP_FAILED) {
-        close(fd);
-        return NULL;
-    }
-    close(fd);
-
-    const struct pdb *pdb = pdb_load(ptr, sb.st_size);
-    munmap((void *)ptr, sb.st_size);
-
-    return pdb;
-}
-
-
-void pdb_close(const struct pdb *pdb)
-{
-    assert(pdb != NULL);
-
-    if (pdb->streams != NULL) {
-        free((void *)pdb->streams);
-    }
-
-    free((void *)pdb);
-}
-
-
-void print_version()
+void print_version(void)
 {
     puts(PROGRAM_NAME " " PROGRAM_VERSION);
     puts(PROGRAM_LICENSE);
@@ -217,7 +212,6 @@ void print_version()
 
 void print_usage(FILE *stream)
 {
-    assert(stream != NULL);
     fputs("Usage: " PROGRAM_NAME " <option(s)> pdb-file\n", stream);
     fputs(" Display information about the contents of Microsoft PDB files\n", stream);
     fputs(" Options are:\n", stream);
@@ -305,9 +299,8 @@ int main(int argc, char **argv)
 
     const char *pdbpath = argv[optind];
 
-    const struct pdb *pdb = pdb_open(pdbpath);
+    void *pdb = open_pdb_file(pdbpath);
     if (pdb == NULL) {
-        fprintf(stderr, "pdb_open failure\n");
         exit(EXIT_FAILURE);
     }
 
@@ -323,6 +316,6 @@ int main(int argc, char **argv)
         print_public_symbols(pdb);
     }
 
-    pdb_close(pdb);
+    close_pdb_file(pdb);
     exit(EXIT_SUCCESS);
 }

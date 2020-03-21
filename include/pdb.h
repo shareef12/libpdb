@@ -57,7 +57,6 @@ typedef void (*free_fn)(void *ptr);
 /* TODO:
  *
  * New APIs
- *  - API for retrieving raw streams?
  *  - API for looking up a symbol in the hashtable
  *  - API for file-based IO to reduce memory usage?
  *      - Memory-reduced mode where we extract streams on demand?
@@ -69,15 +68,12 @@ typedef void (*free_fn)(void *ptr);
  *  - Support for weird systems (preprocessor defines for using stuff like assert, errno, libcurl, fprintf, fread, etc. Also endianness...)
  *
  * Error Handling
- *  - Need additional checking in parse_symbol_stream for checking the contents of symbols (public and otherwise)
- *  - Add a way for pdb.c to emit warning/error messages to stderr while parsing (either toggleable at runtime via static verbosity var, env var, or at compile time with a DEBUG setting) consider a user_error_callback(char *message)
- *  - PDB_ASSERT_* for functions that don't return anything?
  *  - PDB_ENABLE_ASSERTIONS support in build systems
+ *  - Need additional checking in parse_symbol_stream for checking the contents of symbols (public and otherwise)
+ *  - Need to add integer overflow detection in stream extraction
  *
  * Other
- *  - Fix pdbparse.c
  *  - Implement hashtable parsing and searching
- *  - Decide on public symbol iteration API
  *
  *  - Unit tests
  *  - Fuzzing
@@ -93,24 +89,25 @@ void pdb_destroy_context(void *context);
 
 int pdb_load(void *context, const void *pdbdata, size_t len);
 
-void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_sections, uint32_t *nr_streams);
+
+void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_streams);
 uint32_t pdb_get_block_size(void *context);
 uint32_t pdb_get_nr_blocks(void *context);
 const struct guid * pdb_get_guid(void *context);
 uint32_t pdb_get_age(void *context);
-
 uint32_t pdb_get_nr_streams(void *context);
-/* const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size); */
 
-const struct image_section_header * pdb_get_sections(void *context, uint32_t *nr_sections);
+const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size);
 
-/* High-level API to iterate only through public symbols */
-/* TODO: Is a public symbol API really necessary when we can just check and cast in the caller? This produces a lot of duplicate code and/or inefficient double or triple iteration over the data*/
-int pdb_get_nr_public_symbols(void *context, size_t *nr_public_symbols);
+uint32_t pdb_get_nr_sections(void *context);
+const struct image_section_header * pdb_get_sections(void *context);
+
+/* Iterate only through public symbols */
+int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols);
 int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbols);
 
-/* Low-level API to iterate through *all* symbols */
-int pdb_get_nr_symbols(void *context, size_t *nr_symbols);
+/* Iterate through *all* symbols (public + global) */
+int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
 int pdb_get_symbols(void *context, const struct cv_record_header **symbols);
 
 /* Find a symbol by looking it up in the PDB symbol hashtable */
