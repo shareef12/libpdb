@@ -1,6 +1,5 @@
 #include "pdb.h"
 
-#include "pdb/codeview.h"
 #include "pdb/dbistream.h"
 #include "pdb/pdbstream.h"
 #include "pdb/msf.h"
@@ -32,6 +31,13 @@
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+
+/*
+ * Declare these inline functions from cvinfo.h as extern, otherwise they will
+ * not be included in our static library and link errors will result.
+ */
+extern __INLINE SYMTYPE *NextSym (const SYMTYPE * pSym);
+extern __INLINE char *NextType (const char * pType);
 
 /*
  * libpdb uses assertions to catch usage errors when configured with
@@ -469,41 +475,38 @@ static int parse_symbol_stream(struct pdb_context *ctx)
     }
 
     const struct stream *stream = &ctx->streams[symbols_stream_idx];
+    const SYMTYPE *sym = (const SYMTYPE *)stream->data;
+    const SYMTYPE *stream_end = (const SYMTYPE *)(stream->data + stream->size);
+
     uint32_t nr_symbols = 0;
     uint32_t nr_public_symbols = 0;
-    uint32_t idx = 0;
 
-    while (idx < stream->size) {
-        uint32_t sym_end = idx + sizeof(struct cv_record_header);
-        if (sym_end < idx || sym_end > stream->size) {
-            /* Stream too short - not enough data left for a full symbol header */
+    while (sym < stream_end) {
+        const SYMTYPE *next = NextSym(sym);
+        if (sym + sizeof(SYMTYPE) > stream_end || next > stream_end || next <= sym) {
+            /* Stream too short - not enough data left for the full symbol */
             ctx->error = EPDB_FILE_CORRUPT;
             return -1;
         }
 
-        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
-        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
-        if (symbol_sz < sizeof(uint16_t)) {
-            /* Integer overflow */
-            ctx->error = EPDB_FILE_CORRUPT;
-            return -1;
-        }
-
-        sym_end = idx + sizeof(uint16_t) + cvhdr->record_len;
-        if (sym_end < idx || sym_end > stream->size) {
-            /* Stream too short - not enough data left for this symbol */
-            ctx->error = EPDB_FILE_CORRUPT;
-            return -1;
-        }
-
-        /* TODO: Validate that the symbol's contents are valid (i.e. all the symbols fields lie within idx <--> sym_end) */
+        /*
+         * TODO: Validate that the symbol's contents are valid (i.e. all the
+         *  symbols fields lie within sym <--> next) - this is currently on the
+         *  caller to do.
+         */
 
         nr_symbols++;
-        if (cvhdr->record_kind == S_PUB32) {
+        if (sym->rectyp == S_PUB32) {
             nr_public_symbols++;
         }
 
-        idx = sym_end;
+        sym = next;
+    }
+
+    if (sym != stream_end) {
+        /* Invalid stream size - does not match symbol contents */
+        ctx->error = EPDB_FILE_CORRUPT;
+        return -1;
     }
 
     ctx->symbol_stream_parsed = true;
@@ -514,29 +517,26 @@ static int parse_symbol_stream(struct pdb_context *ctx)
 }
 
 
-void get_symbols(struct pdb_context *ctx, const struct cv_record_header **symbols, bool public_only)
+void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool public_only)
 {
     PDB_ASSERT(ctx->symbol_stream_parsed);
 
     /* parse_symbol_stream has already performed symbol stream validation */
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
     const struct stream *stream = &ctx->streams[symbols_stream_idx];
+    const SYMTYPE *sym = (const SYMTYPE *)stream->data;
 
-    uint32_t idx = 0;
     for (size_t i = 0, j = 0; i < ctx->nr_symbols; i++) {
-        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
-        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
-
         if (public_only) {
-            if (cvhdr->record_kind == S_PUB32) {
-                symbols[j++] =cvhdr;
+            if (sym->rectyp == S_PUB32) {
+                symbols[j++] =sym;
             }
         }
         else {
-            symbols[j++] = cvhdr;
+            symbols[j++] = sym;
         }
 
-        idx += symbol_sz;
+        sym = NextSym(sym);
     }
 }
 
@@ -756,7 +756,7 @@ int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
 }
 
 
-int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbols)
+int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -764,7 +764,7 @@ int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbol
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
-    get_symbols(ctx, (const struct cv_record_header **)symbols, true);
+    get_symbols(ctx, (const SYMTYPE **)symbols, true);
 
     return 0;
 }
@@ -792,7 +792,7 @@ int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols)
 }
 
 
-int pdb_get_symbols(void *context, const struct cv_record_header **symbols)
+int pdb_get_symbols(void *context, const SYMTYPE **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -806,7 +806,7 @@ int pdb_get_symbols(void *context, const struct cv_record_header **symbols)
 }
 
 
-const struct cv_public_symbol * pdb_lookup_public_symbol(void *context, const char *mangled_name)
+const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *mangled_name)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
