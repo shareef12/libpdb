@@ -22,11 +22,6 @@
 #include <assert.h>
 #endif // PDB_ENABLE_ASSERTIONS
 
-/*
- * TODO:
- *  - Add integer overflow validation
- */
-
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
@@ -118,8 +113,9 @@ struct pdb_context {
 
 static const char *errstrings[] = {
     "No error",
-    "No PDB loaded",
     "System error",
+    "Allocation failed",
+    "No PDB loaded",
     "Invalid parameter",
     "Unsupported version",
     "PDB file is corrupt",
@@ -166,7 +162,7 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
     bool valid =
         memcmp(sb->file_magic, PDB_SIGNATURE, PDB_SIGNATURE_SZ) == 0 &&
         sb->num_blocks > 0 &&
-        sb->num_blocks * sb->block_size == len &&
+        sb->num_blocks * sb->block_size == len && len / sb->num_blocks == sb->block_size &&
         sb->free_block_map_block < sb->num_blocks &&
         sb->num_directory_bytes > 0 &&
         sb->block_map_addr < sb->num_blocks;
@@ -187,6 +183,7 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
 
 
 static int extract_stream_directory(
+    struct pdb_context *ctx,
     const unsigned char *pdb,
     size_t len,
     const struct superblock *sb,
@@ -196,20 +193,23 @@ static int extract_stream_directory(
     size_t nr_sd_blocks = nr_blocks(sb->num_directory_bytes, sb->block_size);
     if (sb->block_map_addr * sb->block_size + nr_sd_blocks > len) {
         /* Malformed pdb - block_map extends past end of file */
+        ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
     /* Allocate memory in a multiple of block_size to simplify copying */
-    unsigned char *sd = calloc(sb->block_size, nr_sd_blocks);
+    unsigned char *sd = ctx->malloc(sb->block_size * nr_sd_blocks);
     if (sd == NULL) {
-        errno = ENOMEM;
+        ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
     }
+    memset(sd, 0, sb->block_size * nr_sd_blocks);
 
     const uint32_t *block_map = (const uint32_t *)(pdb + sb->block_map_addr * sb->block_size);
     for (size_t i = 0; i < nr_sd_blocks; i++) {
         if (block_map[i] >= sb->num_blocks) {
             /* Malformed pdb - invalid block index */
+            ctx->error = EPDB_FILE_CORRUPT;
             goto err_free_sd;
         }
 
@@ -220,6 +220,7 @@ static int extract_stream_directory(
     uint32_t num_streams = *(uint32_t *)sd;
     if (sizeof(uint32_t) + num_streams * sizeof(uint32_t) > sb->num_directory_bytes) {
         /* Malformed pdb - too many streams */
+        ctx->error = EPDB_FILE_CORRUPT;
         goto err_free_sd;
     }
 
@@ -235,6 +236,7 @@ static int extract_stream_directory(
         total_blocks * sizeof(uint32_t);
     if (computed_sdir_size != sb->num_directory_bytes) {
         /* Malformed pdb - incorrect stream directory size */
+        ctx->error = EPDB_FILE_CORRUPT;
         goto err_free_sd;
     }
 
@@ -249,6 +251,7 @@ err_free_sd:
 
 
 static int do_extract_streams(
+    struct pdb_context *ctx,
     const unsigned char *pdb,
     const struct superblock *sb,
     const struct stream_directory *sd,
@@ -262,11 +265,12 @@ static int do_extract_streams(
         total_sz += nr_blocks(stream_sizes[i], sb->block_size) * sb->block_size;
     }
 
-    struct stream *strms = calloc(1, total_sz);
+    struct stream *strms = ctx->malloc(total_sz);
     if (strms == NULL) {
-        errno = ENOMEM;
+        ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
     }
+    memset(strms, 0, total_sz);
 
     /* Defragment the streams so we have contiguous data for each one */
     const uint32_t *stream_blocks = stream_sizes + sd->num_streams;
@@ -279,6 +283,7 @@ static int do_extract_streams(
             uint32_t block_idx = *stream_blocks;
             if (block_idx >= sb->num_blocks) {
                 /* Malformed pdb - invalid block index */
+                ctx->error = EPDB_FILE_CORRUPT;
                 goto err_free_strms;
             }
 
@@ -314,18 +319,16 @@ static int extract_streams(
 
     const struct stream_directory *sd = NULL;
     size_t sd_len = 0;
-    int err = extract_stream_directory(pdbdata, len, sb, &sd, &sd_len);
+    int err = extract_stream_directory(ctx, pdbdata, len, sb, &sd, &sd_len);
     if (err < 0) {
-        ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
     const struct stream *strms = NULL;
     uint32_t nr_strms = 0;
-    err = do_extract_streams(pdbdata, sb, sd, &strms, &nr_strms);
+    err = do_extract_streams(ctx, pdbdata, sb, sd, &strms, &nr_strms);
     free((void *)sd);
     if (err < 0) {
-        ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
