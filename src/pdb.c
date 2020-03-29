@@ -25,11 +25,11 @@
 /*
  * TODO:
  *  - Add integer overflow validation
- *  - Can we refactor parameter validation in most of these functions? We have the same three context/parameter checks over and over
  */
 
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 /*
@@ -105,14 +105,26 @@ struct pdb_context {
     const struct image_section_header *sections;
     uint32_t nr_sections;
 
+    /* Cached DBI stream info - this stream contains useful stream indices */
+    const struct dbi_stream_header *dbi_header;
+    const struct debug_header *dbg_header;
+
     /* Cached symbol information */
     bool symbol_stream_parsed;
     uint32_t nr_symbols;
     uint32_t nr_public_symbols;
+};
 
-    /* Cached DBI stream info - this stream contains useful stream indices */
-    const struct dbi_stream_header *dbi_header;
-    const struct debug_header *dbg_header;
+
+static const char *errstrings[] = {
+    "No error",
+    "No PDB loaded",
+    "System error",
+    "Invalid parameter",
+    "Unsupported version",
+    "PDB file is corrupt",
+    "Invalid section index",
+    "Invalid section offset",
 };
 
 
@@ -877,10 +889,11 @@ char * pdb_strerror(void *context)
     struct pdb_context *ctx = (struct pdb_context *)context;
     PDB_ASSERT_CTX_NOT_NULL(ctx, NULL);
 
+    PDB_ASSERT(ctx->error < ARRAY_SIZE(errstrings))
+
     if (ctx->error == EPDB_SYSTEM_ERROR) {
         return strerror(errno);
     }
 
-    /* TODO: Lookup ctx->error in a global static array */
-    return NULL;
+    return errstrings[ctx->error];
 }
