@@ -30,13 +30,11 @@
  *
  */
 
-#ifndef _VC_VER_INC
-#include "vcver.h"
-#endif
-
-#pragma once
-
 #include "cvconst.h"
+
+#if defined(__unix__)
+#include <stdint.h>
+#endif
 
 #ifndef _CV_INFO_INCLUDED
 #define _CV_INFO_INCLUDED
@@ -54,6 +52,7 @@
 #endif
 
 #pragma pack ( push, 1 )
+#if defined(_WIN32)
 typedef unsigned long   CV_uoff32_t;
 typedef          long   CV_off32_t;
 typedef unsigned short  CV_uoff16_t;
@@ -63,6 +62,21 @@ typedef unsigned long   CV_typ_t;
 typedef unsigned long   CV_pubsymflag_t;    // must be same as CV_typ_t.
 typedef unsigned short  _2BYTEPAD;
 typedef unsigned long   CV_tkn_t;
+#elif defined(__unix__)
+typedef uint32_t CV_uoff32_t;
+typedef  int32_t CV_off32_t;
+typedef uint16_t CV_uoff16_t;
+typedef  int16_t CV_off16_t;
+typedef uint16_t CV_typ16_t;
+typedef uint32_t CV_typ_t;
+typedef uint32_t CV_pubsymflag_t;    // must be same as CV_typ_t.
+typedef uint16_t _2BYTEPAD;
+typedef uint32_t CV_tkn_t;
+
+typedef int16_t __int64;    // Workaround for Microsoft-specific type
+#else
+#error Unknown compilation target
+#endif
 
 #if !defined (CV_ZEROLEN)
 #define CV_ZEROLEN
@@ -1178,8 +1192,8 @@ typedef struct TYPTYPE {
     unsigned char   data[CV_ZEROLEN];
 } TYPTYPE;          // general types record
 
-__INLINE char *NextType ( _In_ char * pType) {
-    return (pType + ((TYPTYPE *)pType)->len + sizeof(unsigned short));
+__INLINE char *NextType (const char * pType) {
+    return (char *)(pType + ((TYPTYPE *)pType)->len + sizeof(unsigned short));
 }
 
 typedef enum CV_PMEMBER {
@@ -3159,7 +3173,7 @@ typedef struct SYMTYPE {
     char                data[CV_ZEROLEN];
 } SYMTYPE;
 
-__INLINE SYMTYPE *NextSym (SYMTYPE * pSym) {
+__INLINE SYMTYPE *NextSym (const SYMTYPE * pSym) {
     return (SYMTYPE *) ((char *)pSym + pSym->reclen + sizeof(unsigned short));
 }
 
