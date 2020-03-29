@@ -44,7 +44,7 @@ extern __INLINE char *NextType (const char * pType);
 #define PDB_ASSERT(expr) assert(expr)
 #define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) assert((ctx) != NULL)
 #define PDB_ASSERT_PDB_LOADED(ctx, retval) assert((ctx)->pdb_loaded)
-#define PDB_ASSERT_PARAMETER(ctx, expr, retval) assert(expr)
+#define PDB_ASSERT_PARAMETER(ctx, retval, expr) assert(expr)
 
 #else
 
