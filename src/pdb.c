@@ -887,12 +887,12 @@ pdb_errno_t pdb_errno(void *context)
 }
 
 
-char * pdb_strerror(void *context)
+const char * pdb_strerror(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
     PDB_ASSERT_CTX_NOT_NULL(ctx, NULL);
 
-    PDB_ASSERT(ctx->error < ARRAY_SIZE(errstrings))
+    PDB_ASSERT(ctx->error < ARRAY_SIZE(errstrings));
 
     if (ctx->error == EPDB_SYSTEM_ERROR) {
         return strerror(errno);

@@ -71,8 +71,8 @@ uint32_t pdb_get_block_size(void *context);
 uint32_t pdb_get_nr_blocks(void *context);
 const struct guid * pdb_get_guid(void *context);
 uint32_t pdb_get_age(void *context);
-uint32_t pdb_get_nr_streams(void *context);
 
+uint32_t pdb_get_nr_streams(void *context);
 const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size);
 
 uint32_t pdb_get_nr_sections(void *context);
@@ -93,7 +93,7 @@ int pdb_get_symbols(void *context, const struct SYMTYPE **symbols);
 int pdb_convert_section_offset_to_rva(void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
 
 pdb_errno_t pdb_errno(void *context);
-char * pdb_strerror(void *context);
+const char * pdb_strerror(void *context);
 
 #pragma pack(pop)
 
