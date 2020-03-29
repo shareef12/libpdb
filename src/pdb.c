@@ -1,6 +1,5 @@
 #include "pdb.h"
 
-#include "pdb/codeview.h"
 #include "pdb/dbistream.h"
 #include "pdb/pdbstream.h"
 #include "pdb/msf.h"
@@ -23,15 +22,17 @@
 #include <assert.h>
 #endif // PDB_ENABLE_ASSERTIONS
 
-/*
- * TODO:
- *  - Add integer overflow validation
- *  - Can we refactor parameter validation in most of these functions? We have the same three context/parameter checks over and over
- */
-
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
+
+/*
+ * Declare these inline functions from cvinfo.h as extern, otherwise they will
+ * not be included in our static library and link errors will result.
+ */
+extern __INLINE SYMTYPE *NextSym (const SYMTYPE * pSym);
+extern __INLINE char *NextType (const char * pType);
 
 /*
  * libpdb uses assertions to catch usage errors when configured with
@@ -99,14 +100,27 @@ struct pdb_context {
     const struct image_section_header *sections;
     uint32_t nr_sections;
 
+    /* Cached DBI stream info - this stream contains useful stream indices */
+    const struct dbi_stream_header *dbi_header;
+    const struct debug_header *dbg_header;
+
     /* Cached symbol information */
     bool symbol_stream_parsed;
     uint32_t nr_symbols;
     uint32_t nr_public_symbols;
+};
 
-    /* Cached DBI stream info - this stream contains useful stream indices */
-    const struct dbi_stream_header *dbi_header;
-    const struct debug_header *dbg_header;
+
+static const char *errstrings[] = {
+    "No error",
+    "System error",
+    "Allocation failed",
+    "No PDB loaded",
+    "Invalid parameter",
+    "Unsupported version",
+    "PDB file is corrupt",
+    "Invalid section index",
+    "Invalid section offset",
 };
 
 
@@ -148,7 +162,7 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
     bool valid =
         memcmp(sb->file_magic, PDB_SIGNATURE, PDB_SIGNATURE_SZ) == 0 &&
         sb->num_blocks > 0 &&
-        sb->num_blocks * sb->block_size == len &&
+        sb->num_blocks * sb->block_size == len && len / sb->num_blocks == sb->block_size &&
         sb->free_block_map_block < sb->num_blocks &&
         sb->num_directory_bytes > 0 &&
         sb->block_map_addr < sb->num_blocks;
@@ -169,6 +183,7 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
 
 
 static int extract_stream_directory(
+    struct pdb_context *ctx,
     const unsigned char *pdb,
     size_t len,
     const struct superblock *sb,
@@ -178,20 +193,23 @@ static int extract_stream_directory(
     size_t nr_sd_blocks = nr_blocks(sb->num_directory_bytes, sb->block_size);
     if (sb->block_map_addr * sb->block_size + nr_sd_blocks > len) {
         /* Malformed pdb - block_map extends past end of file */
+        ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
     /* Allocate memory in a multiple of block_size to simplify copying */
-    unsigned char *sd = calloc(sb->block_size, nr_sd_blocks);
+    unsigned char *sd = ctx->malloc(sb->block_size * nr_sd_blocks);
     if (sd == NULL) {
-        errno = ENOMEM;
+        ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
     }
+    memset(sd, 0, sb->block_size * nr_sd_blocks);
 
     const uint32_t *block_map = (const uint32_t *)(pdb + sb->block_map_addr * sb->block_size);
     for (size_t i = 0; i < nr_sd_blocks; i++) {
         if (block_map[i] >= sb->num_blocks) {
             /* Malformed pdb - invalid block index */
+            ctx->error = EPDB_FILE_CORRUPT;
             goto err_free_sd;
         }
 
@@ -202,6 +220,7 @@ static int extract_stream_directory(
     uint32_t num_streams = *(uint32_t *)sd;
     if (sizeof(uint32_t) + num_streams * sizeof(uint32_t) > sb->num_directory_bytes) {
         /* Malformed pdb - too many streams */
+        ctx->error = EPDB_FILE_CORRUPT;
         goto err_free_sd;
     }
 
@@ -217,6 +236,7 @@ static int extract_stream_directory(
         total_blocks * sizeof(uint32_t);
     if (computed_sdir_size != sb->num_directory_bytes) {
         /* Malformed pdb - incorrect stream directory size */
+        ctx->error = EPDB_FILE_CORRUPT;
         goto err_free_sd;
     }
 
@@ -231,6 +251,7 @@ err_free_sd:
 
 
 static int do_extract_streams(
+    struct pdb_context *ctx,
     const unsigned char *pdb,
     const struct superblock *sb,
     const struct stream_directory *sd,
@@ -244,11 +265,12 @@ static int do_extract_streams(
         total_sz += nr_blocks(stream_sizes[i], sb->block_size) * sb->block_size;
     }
 
-    struct stream *strms = calloc(1, total_sz);
+    struct stream *strms = ctx->malloc(total_sz);
     if (strms == NULL) {
-        errno = ENOMEM;
+        ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
     }
+    memset(strms, 0, total_sz);
 
     /* Defragment the streams so we have contiguous data for each one */
     const uint32_t *stream_blocks = stream_sizes + sd->num_streams;
@@ -261,6 +283,7 @@ static int do_extract_streams(
             uint32_t block_idx = *stream_blocks;
             if (block_idx >= sb->num_blocks) {
                 /* Malformed pdb - invalid block index */
+                ctx->error = EPDB_FILE_CORRUPT;
                 goto err_free_strms;
             }
 
@@ -296,18 +319,16 @@ static int extract_streams(
 
     const struct stream_directory *sd = NULL;
     size_t sd_len = 0;
-    int err = extract_stream_directory(pdbdata, len, sb, &sd, &sd_len);
+    int err = extract_stream_directory(ctx, pdbdata, len, sb, &sd, &sd_len);
     if (err < 0) {
-        ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
     const struct stream *strms = NULL;
     uint32_t nr_strms = 0;
-    err = do_extract_streams(pdbdata, sb, sd, &strms, &nr_strms);
+    err = do_extract_streams(ctx, pdbdata, sb, sd, &strms, &nr_strms);
     free((void *)sd);
     if (err < 0) {
-        ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
@@ -469,41 +490,38 @@ static int parse_symbol_stream(struct pdb_context *ctx)
     }
 
     const struct stream *stream = &ctx->streams[symbols_stream_idx];
+    const SYMTYPE *sym = (const SYMTYPE *)stream->data;
+    const SYMTYPE *stream_end = (const SYMTYPE *)(stream->data + stream->size);
+
     uint32_t nr_symbols = 0;
     uint32_t nr_public_symbols = 0;
-    uint32_t idx = 0;
 
-    while (idx < stream->size) {
-        uint32_t sym_end = idx + sizeof(struct cv_record_header);
-        if (sym_end < idx || sym_end > stream->size) {
-            /* Stream too short - not enough data left for a full symbol header */
+    while (sym < stream_end) {
+        const SYMTYPE *next = NextSym(sym);
+        if (sym + sizeof(SYMTYPE) > stream_end || next > stream_end || next <= sym) {
+            /* Stream too short - not enough data left for the full symbol */
             ctx->error = EPDB_FILE_CORRUPT;
             return -1;
         }
 
-        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
-        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
-        if (symbol_sz < sizeof(uint16_t)) {
-            /* Integer overflow */
-            ctx->error = EPDB_FILE_CORRUPT;
-            return -1;
-        }
-
-        sym_end = idx + sizeof(uint16_t) + cvhdr->record_len;
-        if (sym_end < idx || sym_end > stream->size) {
-            /* Stream too short - not enough data left for this symbol */
-            ctx->error = EPDB_FILE_CORRUPT;
-            return -1;
-        }
-
-        /* TODO: Validate that the symbol's contents are valid (i.e. all the symbols fields lie within idx <--> sym_end) */
+        /*
+         * TODO: Validate that the symbol's contents are valid (i.e. all the
+         *  symbols fields lie within sym <--> next) - this is currently on the
+         *  caller to do.
+         */
 
         nr_symbols++;
-        if (cvhdr->record_kind == S_PUB32) {
+        if (sym->rectyp == S_PUB32) {
             nr_public_symbols++;
         }
 
-        idx = sym_end;
+        sym = next;
+    }
+
+    if (sym != stream_end) {
+        /* Invalid stream size - does not match symbol contents */
+        ctx->error = EPDB_FILE_CORRUPT;
+        return -1;
     }
 
     ctx->symbol_stream_parsed = true;
@@ -514,29 +532,26 @@ static int parse_symbol_stream(struct pdb_context *ctx)
 }
 
 
-void get_symbols(struct pdb_context *ctx, const struct cv_record_header **symbols, bool public_only)
+void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool public_only)
 {
     PDB_ASSERT(ctx->symbol_stream_parsed);
 
     /* parse_symbol_stream has already performed symbol stream validation */
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
     const struct stream *stream = &ctx->streams[symbols_stream_idx];
+    const SYMTYPE *sym = (const SYMTYPE *)stream->data;
 
-    uint32_t idx = 0;
     for (size_t i = 0, j = 0; i < ctx->nr_symbols; i++) {
-        const struct cv_record_header *cvhdr = (const struct cv_record_header *)(stream->data + idx);
-        uint16_t symbol_sz = sizeof(uint16_t) + cvhdr->record_len;
-
         if (public_only) {
-            if (cvhdr->record_kind == S_PUB32) {
-                symbols[j++] =cvhdr;
+            if (sym->rectyp == S_PUB32) {
+                symbols[j++] =sym;
             }
         }
         else {
-            symbols[j++] = cvhdr;
+            symbols[j++] = sym;
         }
 
-        idx += symbol_sz;
+        sym = NextSym(sym);
     }
 }
 
@@ -756,7 +771,7 @@ int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
 }
 
 
-int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbols)
+int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -764,7 +779,7 @@ int pdb_get_public_symbols(void *context, const struct cv_public_symbol **symbol
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
-    get_symbols(ctx, (const struct cv_record_header **)symbols, true);
+    get_symbols(ctx, (const SYMTYPE **)symbols, true);
 
     return 0;
 }
@@ -792,7 +807,7 @@ int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols)
 }
 
 
-int pdb_get_symbols(void *context, const struct cv_record_header **symbols)
+int pdb_get_symbols(void *context, const SYMTYPE **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -806,7 +821,7 @@ int pdb_get_symbols(void *context, const struct cv_record_header **symbols)
 }
 
 
-const struct cv_public_symbol * pdb_lookup_public_symbol(void *context, const char *mangled_name)
+const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *mangled_name)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -877,10 +892,11 @@ char * pdb_strerror(void *context)
     struct pdb_context *ctx = (struct pdb_context *)context;
     PDB_ASSERT_CTX_NOT_NULL(ctx, NULL);
 
+    PDB_ASSERT(ctx->error < ARRAY_SIZE(errstrings))
+
     if (ctx->error == EPDB_SYSTEM_ERROR) {
         return strerror(errno);
     }
 
-    /* TODO: Lookup ctx->error in a global static array */
-    return NULL;
+    return errstrings[ctx->error];
 }
