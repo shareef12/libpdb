@@ -139,7 +139,7 @@ void print_public_symbols(void *pdb)
         return;
     }
 
-    const struct cv_public_symbol **symbols = calloc(nr_symbols, sizeof(void *));
+    const PUBSYM32 **symbols = calloc(nr_symbols, sizeof(void *));
     if (symbols == NULL) {
         fprintf(stderr, "Couldn't allocate memory for %d symbols\n", nr_symbols);
         return;
@@ -155,24 +155,24 @@ void print_public_symbols(void *pdb)
     puts("   Num:    Value          Type    Name");
 
     for (uint32_t i = 0; i < nr_symbols; i++) {
-        const struct cv_public_symbol *sym = symbols[i];
+        const PUBSYM32 *sym = symbols[i];
 
         /* TODO: Can a symbol have multiple flags set? */
         const char *sym_type;
-        switch (sym->flags) {
-        case 0: sym_type = "NOTYPE"; break;
-        case CVPSF_CODE: sym_type = "CODE"; break;
-        case CVPSF_FUNCTION: sym_type = "FUNC"; break;
-        case CVPSF_MANAGED: sym_type = "MANAGE"; break;
-        case CVPSF_MSIL: sym_type = "MSIL"; break;
+        switch (sym->pubsymflags.grfFlags) {
+        case cvpsfNone: sym_type = "NOTYPE"; break;
+        case cvpsfCode: sym_type = "CODE"; break;
+        case cvpsfFunction: sym_type = "FUNC"; break;
+        case cvpsfManaged: sym_type = "MANAGE"; break;
+        case cvpsfMSIL: sym_type = "MSIL"; break;
         default:
-            fprintf(stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->mangled_name, sym->flags);
+            fprintf(stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->name, sym->pubsymflags.grfFlags);
             sym_type = "UNK";
             break;
         }
 
         uint32_t sym_rva = 0;
-        if (pdb_convert_section_offset_to_rva(pdb, sym->section_idx, sym->section_offset, &sym_rva) < 0) {
+        if (pdb_convert_section_offset_to_rva(pdb, sym->seg, sym->off, &sym_rva) < 0) {
             /*
             * TODO: For some reason there are a few symbols that have an invalid section_idx.
             *  They all have the same idx, one past the end of the sections array. There are
@@ -195,11 +195,13 @@ void print_public_symbols(void *pdb)
             * WARNING: No RVA translation for symbol: __pde_top (idx=0x1c offset=0x7fffffff): (null)
             */
             fprintf(stderr, "WARNING: No RVA translation for symbol: %s (idx=0x%x offset=0x%x): %s\n",
-                sym->mangled_name, sym->section_idx, sym->section_offset, pdb_strerror(pdb));
+                sym->name, sym->seg, sym->off, pdb_strerror(pdb));
         }
 
-        printf("%6u: %016x  %-6s  %s\n", i, sym_rva, sym_type, sym->mangled_name);
+        printf("%6u: %016x  %-6s  %s\n", i, sym_rva, sym_type, sym->name);
     }
+
+    free(symbols);
 }
 
 
