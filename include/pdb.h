@@ -21,6 +21,7 @@ typedef enum pdb_errno_t {
     EPDB_FILE_CORRUPT,
     EPDB_INVALID_SECTION_IDX,
     EPDB_INVALID_SECTION_OFFSET,
+    EPDB_NOT_FOUND,
 } pdb_errno_t;
 
 struct guid {
@@ -87,8 +88,7 @@ int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
 int pdb_get_symbols(void *context, const struct SYMTYPE **symbols);
 
 /* Find a symbol by looking it up in the PDB symbol hashtable */
-/* const struct cv_public_symbol * pdb_lookup_public_symbol(void *context, const char *mangled_name); */
-/* const struct cv_global_symbol * pdb_lookup_global_symbol(void *context, const char *mangled_name); */
+const PUBSYM32 * pdb_lookup_public_symbol(void *context, char *mangled_name);
 
 int pdb_convert_section_offset_to_rva(void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
 

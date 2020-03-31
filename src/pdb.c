@@ -1,6 +1,7 @@
 #include "pdb.h"
 
 #include "pdb/dbistream.h"
+#include "pdb/gsistream.h"
 #include "pdb/pdbstream.h"
 #include "pdb/msf.h"
 
@@ -77,6 +78,16 @@ struct stream {
     const unsigned char *data;
 };
 
+struct sym_hashrec {
+    const SYMTYPE *sym;
+    const struct sym_hashrec *next;
+    uint32_t c_ref;
+};
+
+struct sym_hashtable {
+    struct sym_hashrec *buckets[NR_HASH_BUCKETS];
+};
+
 struct pdb_context {
     /* User-supplied memory alloc/free functions */
     malloc_fn malloc;
@@ -108,6 +119,7 @@ struct pdb_context {
     bool symbol_stream_parsed;
     uint32_t nr_symbols;
     uint32_t nr_public_symbols;
+    struct sym_hashtable pubsym_hashtab;
 };
 
 
@@ -121,6 +133,7 @@ static const char *errstrings[] = {
     "PDB file is corrupt",
     "Invalid section index",
     "Invalid section offset",
+    "Not found",
 };
 
 
@@ -532,7 +545,7 @@ static int parse_symbol_stream(struct pdb_context *ctx)
 }
 
 
-void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool public_only)
+static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool public_only)
 {
     PDB_ASSERT(ctx->symbol_stream_parsed);
 
@@ -821,7 +834,188 @@ int pdb_get_symbols(void *context, const SYMTYPE **symbols)
 }
 
 
-const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *mangled_name)
+static size_t nr_bits_set(
+    unsigned char *bitvector,
+    size_t bitvector_size)
+{
+    /*
+     * Compute a static memoized table - this is still thread-safe because the
+     * end-result is always the same. Two interleaved threads computing the
+     * table will not cause issues.
+     */
+    static bool table_computed = false;
+    static unsigned char table[256] = {0};
+
+    if (!table_computed) {
+        for (int i = 0; i < 256; i++) {
+            unsigned char val = 0;
+            int c = i;
+            for (int j = 0; j < 8 && c != 0; j++) {
+                if (c & 1) {
+                    val++;
+                }
+                c >> 1;
+            }
+            table[i] = val;
+        }
+        table_computed = true;
+    }
+
+    size_t nr_set = 0;
+    for (size_t i = 0; i < bitvector_size; i++) {
+        nr_set += table[bitvector[i]];
+    }
+
+    return nr_set;
+}
+
+
+static void gsi_expand_buckets(
+    unsigned char *pbitvector,
+    uint32_t *buckets)
+{
+
+}
+
+
+static int gsi_parse_hashtable(
+    struct pdb_context *ctx,
+    const struct gsi_hash_header *hdr)
+{
+    struct sym_hashrec *hashrecs = NULL;
+
+    /* Allocate the hashrecs array to contain fixed-up hash chains */
+    uint32_t nr_hashrecs = hdr->cb_hr / sizeof(struct gsi_hashrec);
+    hashrecs = ctx->malloc(nr_hashrecs * sizeof(struct sym_hashrec));
+    if (hashrecs == NULL) {
+        ctx->error = EPDB_ALLOCATION_FAILURE;
+        return -1;
+    }
+
+    /*
+     * Populate the hashrecs array - for now, assume that all hashrecs are in
+     * a single long chain. When we process the buckets, we will terminate
+     * the end of each bucket's chain appropriately.
+     */
+    const struct gsi_hashrec *hr = (const struct gsi_hashrec *)((unsigned char *)hdr + sizeof(struct gsi_hash_header));
+    for (uint32_t i = 0; i < nr_hashrecs; i++) {
+        hashrecs[i].sym = NULL; /* TODO: This function needs to know where the symbol stream is so we can fill this in */ /* TODO: These are 1-biased */
+        hashrecs[i].c_ref = hr[i].c_ref;
+        hashrecs[i].next = &hashrecs[i+1];
+    }
+
+    /* Begin parsing the hash buckets */
+    size_t pbitvec_sz = NR_HASH_BUCKETS / 8;
+    if (hdr->cb_buckets < pbitvec_sz) {
+        /* Malformed PDB - not enough space for present bit vector */
+        goto err_pdb_corrupt;
+    }
+
+    /*
+     * Get the Present Bit Vector and the number of buckets with data.
+     *
+     * NOTE: Even though there is a static limit of 4096 buckets, Microsoft
+     *  actually emits 4097 items in the buckets array (the hashtable still
+     *  only has 4096 bits). The first entry is a NULL sentinel value. I
+     *  suspect this is a workaround for something in their codebase (it
+     *  appears they walk backwards through the bucket array during parsing),
+     *  but I am not sure. We skip this sentinel value here.
+     */
+    unsigned char *pbitvec = (unsigned char *)hdr + sizeof(struct gsi_hash_header) + hdr->cb_hr;
+    size_t nr_full_buckets = nr_bits_set(pbitvec, pbitvec_sz);
+    if (hdr->cb_buckets < pbitvec_sz + sizeof(uint32_t) + nr_full_buckets * sizeof(uint32_t)) {
+        /* Malformed PDB - not enough space for bucket contents */
+        goto err_pdb_corrupt;
+    }
+
+    /* Iterate through the Present Bit Vector, populate buckets, and fixup hashrec chains */
+    uint32_t *buckets = (uint32_t *)(pbitvec + pbitvec_sz + sizeof(uint32_t));
+    size_t buckets_sz = hdr->cb_buckets - pbitvec_sz - sizeof(uint32_t);
+    size_t buckets_idx = 0;
+
+    for (size_t i = 0; i < pbitvec_sz; i++) {
+        char c = pbitvec[i];
+        for (int j = 0; j < 8 && c != 0; j++) {
+            if (c & 1) {
+                /* The bucket has a chain */
+
+                if (buckets_idx >= nr_full_buckets) {
+                    /* Malformed PDB - no space in stream for bucket contents */
+                    goto err_pdb_corrupt;
+                }
+
+                /* Get the start and end offsets of the chain */
+                uint32_t chain_start_off = buckets[buckets_idx];
+                uint32_t chain_end_off = 0;
+                if (buckets_idx + 1 == nr_full_buckets) {
+                    /* This is the last bucket - its chain contains the remainder of the hashrecs */
+                    chain_end_off = nr_hashrecs * sizeof(struct gsi_hashrec_offset_calc);
+                }
+                else {
+                    /* This is an intermediate bucket - its chain lasts until the next full bucket's chain start */
+                    chain_end_off = buckets[buckets_idx + 1];
+                }
+
+                /*
+                 * WARNING: The offsets specified in the buckets are NOT true
+                 *  file-based offsets into the hashrec array. They are offsets
+                 *  into the expanded in-memory format used by Microsoft after
+                 *  parsing (gsi_hashrec_offset_calc). The offset must be
+                 *  normalized to get the true file-based offset for the chain.
+                 */
+                if (chain_start_off % sizeof(struct gsi_hashrec_offset_calc) != 0 ||
+                    chain_end_off % sizeof(struct gsi_hashrec_offset_calc) != 0) {
+                    goto err_pdb_corrupt;
+                }
+                chain_start_off = chain_start_off / sizeof(struct gsi_hashrec_offset_calc) * sizeof(struct gsi_hashrec);
+                chain_end_off = chain_end_off / sizeof(struct gsi_hashrec_offset_calc) * sizeof(struct gsi_hashrec);
+
+                /* Validate the offsets for the bucket's chain */
+                if (hdr->cb_hr < chain_end_off ||                           /* chain must be in the stream */
+                    chain_end_off <= chain_start_off ||                     /* start < end */
+                    chain_start_off % sizeof(struct gsi_hashrec) != 0 ||    /* start must be on a hashrec boundary */
+                    (chain_end_off - chain_start_off) % sizeof(struct gsi_hashrec) != 0) {  /* start and end are properly aligned */
+                    /* Malformed pdb - invalid chain indicies */
+                    goto err_pdb_corrupt;
+                }
+
+                /*
+                 * Construct the bucket entry for this chain. Fixup the chain
+                 * links by terminating the last item in the chain
+                 * appropriately.
+                 */
+                uint32_t chain_start_idx = chain_start_off / sizeof(struct gsi_hashrec);
+                uint32_t nr_hashrecs_in_chain = (chain_end_off - chain_start_off) / sizeof(struct gsi_hashrec);
+
+                ctx->pubsym_hashtab.buckets[i * 8 + j] = &hashrecs[chain_start_idx];
+                hashrecs[chain_start_idx + nr_hashrecs_in_chain - 1].next = NULL;
+
+                buckets_idx++;
+            }
+            else {
+                /* The bucket does not have a chain */
+                ctx->pubsym_hashtab.buckets[i * 8 + j] = NULL;
+            }
+
+            c >> 1;
+        }
+    }
+
+    return 0;
+
+err_pdb_corrupt:
+    memset(ctx->pubsym_hashtab.buckets, 0, sizeof(ctx->pubsym_hashtab.buckets));
+
+    if (hashrecs != NULL) {
+        ctx->free(hashrecs);
+    }
+
+    ctx->error = EPDB_FILE_CORRUPT;
+    return -1;
+}
+
+
+const PUBSYM32 * pdb_lookup_public_symbol(void *context, char *mangled_name)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -829,17 +1023,47 @@ const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *mangled_nam
     PDB_ASSERT_PDB_LOADED(ctx, NULL);
     PDB_ASSERT_PARAMETER(ctx, NULL, mangled_name != NULL && *mangled_name != '\0');
 
-    //uint16_t global_symbols_idx = PDB_PRIVATE(pdb)->dbi_header->global_stream_index;
-    uint16_t global_symbols_idx = ctx->dbi_header->public_stream_index;
-    if (global_symbols_idx >= ctx->nr_streams) {
-        /* Not enough streams */
+    /* TODO: Move this parsing into parse_symbol_stream or parse_dbi_stream */
+    uint16_t public_symbols_idx = ctx->dbi_header->public_stream_index;
+    if (public_symbols_idx >= ctx->nr_streams) {
+        ctx->error = EPDB_FILE_CORRUPT;
         return NULL;
     }
 
-    const struct stream *stream = &ctx->streams[global_symbols_idx];
+    const struct stream *stream = &ctx->streams[public_symbols_idx];
+    if (stream->size < sizeof(struct gsi_stream_header)) {
+        ctx->error = EPDB_FILE_CORRUPT;
+        return NULL;
+    }
+
+    const struct gsi_stream_header *hdr = (const struct gsi_stream_header *)stream->data;
+    if (sizeof(struct gsi_stream_header) + hdr->sym_hash_size > stream->size ||
+        hdr->sym_hash_size < sizeof(struct gsi_hash_header)) {
+        ctx->error = EPDB_FILE_CORRUPT;
+        return NULL;
+    }
+
+    const struct gsi_hash_header *hash_hdr = (const struct gsi_hash_header *)((unsigned char *)hdr + sizeof(struct gsi_stream_header));
+    if (hash_hdr->ver_signature != -1 || hash_hdr->ver_hdr != gsi_hash_sc_impv_v70) {
+        ctx->error = EPDB_UNSUPPORTED_VERSION;
+        return NULL;
+    }
+
+    if (sizeof(struct gsi_hash_header) + hash_hdr->cb_hr + hash_hdr->cb_buckets != hdr->sym_hash_size) {
+        ctx->error = EPDB_FILE_CORRUPT;
+        return NULL;
+    }
+
 
     // TODO: Parse the hash table
 
+
+    if (gsi_parse_hashtable(ctx, hash_hdr) < 0) {
+        return NULL;
+    }
+
+
+    ctx->error = EPDB_NOT_FOUND;
     return NULL;
 }
 
