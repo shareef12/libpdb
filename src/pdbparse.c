@@ -149,9 +149,12 @@ void print_public_symbols(void *pdb)
         return;
     }
 
+    /* Get the number of section headers so we can detect dynamic symbols */
+    uint32_t nr_sections = pdb_get_nr_sections(pdb);
+
     puts("");
     printf("Public stream contains %u symbols:\n", nr_symbols);
-    puts("   Num:    Value          Type    Name");
+    puts("   Num:  Value    Type    Name");
 
     for (uint32_t i = 0; i < nr_symbols; i++) {
         const PUBSYM32 *sym = symbols[i];
@@ -171,33 +174,27 @@ void print_public_symbols(void *pdb)
         }
 
         uint32_t sym_rva = 0;
-        if (pdb_convert_section_offset_to_rva(pdb, sym->seg, sym->off, &sym_rva) < 0) {
-            /*
-            * TODO: For some reason there are a few symbols that have an invalid section_idx.
-            *  They all have the same idx, one past the end of the sections array. There are
-            *  27 ntos sections, and they all have idx=28, so after subtracting 1, they are
-            *  section_idx == nr_sections, which would cause an overflow.
-            *
-            * WARNING: No RVA translation for symbol: __guard_flags (idx=0x1c offset=0x1011c500): (null)
-            * WARNING: No RVA translation for symbol: __guard_longjmp_count (idx=0x1c offset=0x0): (null)
-            * WARNING: No RVA translation for symbol: __ppe_base (idx=0x1c offset=0x7da00000): (null)
-            * WARNING: No RVA translation for symbol: __pxe_top (idx=0x1c offset=0x7dbedfff): (null)
-            * WARNING: No RVA translation for symbol: __pte_base (idx=0x1c offset=0x0): (null)
-            * WARNING: No RVA translation for symbol: __pde_base (idx=0x1c offset=0x40000000): (null)
-            * WARNING: No RVA translation for symbol: __pxe_selfmap (idx=0x1c offset=0x7dbedf68): (null)
-            * WARNING: No RVA translation for symbol: __mm_pfn_database (idx=0x1c offset=0x0): (null)
-            * WARNING: No RVA translation for symbol: __pxe_base (idx=0x1c offset=0x7dbed000): (null)
-            * WARNING: No RVA translation for symbol: __guard_fids_count (idx=0x1c offset=0x180d): (null)
-            * WARNING: No RVA translation for symbol: __guard_iat_count (idx=0x1c offset=0x2): (null)
-            * WARNING: No RVA translation for symbol: __guard_longjmp_table (idx=0x1c offset=0x0): (null)
-            * WARNING: No RVA translation for symbol: __pte_top (idx=0x1c offset=0xffffffff): (null)
-            * WARNING: No RVA translation for symbol: __pde_top (idx=0x1c offset=0x7fffffff): (null)
-            */
-            fprintf(stderr, "WARNING: No RVA translation for symbol: %s (idx=0x%x offset=0x%x): %s\n",
-                sym->name, sym->seg, sym->off, pdb_strerror(pdb));
+        const char *sym_dynamic = "";
+
+        /*
+         * Some ntoskrnl symbols represent data that is subject to KASLR. These
+         * symbols are emitted to the PDB with an invalid section index
+         * (sym->seg - 1 == nr_sections). However, we still have section offset
+         * information. I suspect this is relative to the base KASLR address
+         * computed by the kernel.
+         */
+        if (sym->seg - 1 == nr_sections) {
+            sym_rva = sym->off;
+            sym_dynamic = " (dynamic)";
+        }
+        else {
+            if (pdb_convert_section_offset_to_rva(pdb, sym->seg, sym->off, &sym_rva) < 0) {
+                fprintf(stderr, "WARNING: No RVA translation for symbol: %s (idx=0x%x offset=0x%x): %s\n",
+                    sym->name, sym->seg, sym->off, pdb_strerror(pdb));
+            }
         }
 
-        printf("%6u: %016x  %-6s  %s\n", i, sym_rva, sym_type, sym->name);
+        printf("%6u: %08x  %-6s  %s%s\n", i, sym_rva, sym_type, sym->name, sym_dynamic);
     }
 
     free(symbols);
