@@ -957,8 +957,10 @@ void pdb_destroy_context(void *context)
         return;
     }
 
+    free_fn user_free_fn = ctx->free;
+
     cleanup_pdb_context(ctx);
-    ctx->free(ctx);
+    user_free_fn(ctx);
 }
 
 
