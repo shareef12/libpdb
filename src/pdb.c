@@ -865,7 +865,7 @@ static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool p
  * This function was lifted almost verbatim from Microsoft's PDB code on
  * github. See microsoft-pdb PDB/include/misc.h:Hasher::lhashPbCb.
  */
-static uint16_t hash_mod(unsigned char *data, size_t length, uint32_t modulus)
+static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modulus)
 {
     uint32_t hash = 0;
 
@@ -1178,7 +1178,7 @@ int pdb_get_symbols(void *context, const SYMTYPE **symbols)
 }
 
 
-const PUBSYM32 * pdb_lookup_public_symbol(void *context, char *name, bool case_sensitive)
+const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *name, bool case_sensitive)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1195,7 +1195,7 @@ const PUBSYM32 * pdb_lookup_public_symbol(void *context, char *name, bool case_s
     int (*strcmp_fn)(const char *, const char *);
     strcmp_fn = case_sensitive ? strcmp : strcasecmp;
 
-    /* Hash the symbol and get it's bucket from the hashtable */
+    /* Hash the symbol and get its bucket from the hashtable */
     uint16_t hash = hash_mod(name, strlen(name), NR_HASH_BUCKETS);
     const struct sym_hashrec *item = ctx->pubsym_hashtab.buckets[hash];
 
