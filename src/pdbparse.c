@@ -9,7 +9,6 @@
 
 #include "pdb.h"
 
-/* TODO: Define these in cmake and make them available through a configure file */
 #define PROGRAM_NAME "pdbparse"
 #define PROGRAM_VERSION "0.1.0"
 #define PROGRAM_LICENSE \

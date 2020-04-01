@@ -398,7 +398,7 @@ static int parse_pdb_stream(struct pdb_context *ctx)
     /* TODO: Parse name table */
 
     ctx->age = hdr->age;
-    memcpy(ctx->guid.bytes, hdr->unique_id, 16);
+    memcpy(&ctx->guid, hdr->unique_id, 16);
 
     return 0;
 }

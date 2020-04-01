@@ -25,15 +25,10 @@ typedef enum pdb_errno_t {
 } pdb_errno_t;
 
 struct guid {
-    union {
-        struct {
-            uint32_t data1;
-            uint16_t data2;
-            uint16_t data3;
-            unsigned char data4[8];
-        };
-        unsigned char bytes[16];
-    };
+    uint32_t data1;
+    uint16_t data2;
+    uint16_t data3;
+    unsigned char data4[8];
 };
 
 #define IMAGE_SIZEOF_SHORT_NAME 8
