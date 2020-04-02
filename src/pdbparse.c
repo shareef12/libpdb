@@ -1,3 +1,6 @@
+#include "config.h"
+#include "pdb.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -9,14 +12,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "pdb.h"
-
 #define PROGRAM_NAME "pdbparse"
-#define PROGRAM_VERSION "0.1.0"
-#define PROGRAM_LICENSE \
-    "Copyright (c) 2020 Christian Sharpsten\n" \
-    "This program is free software; you may redistribute it under the terms of\n" \
-    "the Expat license. This program has absolutely no warranty."
+#define PROGRAM_VERSION PROJECT_VERSION
+#define PROGRAM_LICENSE PROJECT_LICENSE
 
 /* 32 hex characters + 4 hyphens + enclosing braces */
 #define GUID_STR_SIZE (32 + 4 + 2)

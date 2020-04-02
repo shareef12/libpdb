@@ -33,8 +33,8 @@
  * Declare these inline functions from cvinfo.h as extern, otherwise they will
  * not be included in our static library and link errors will result.
  */
-extern __INLINE SYMTYPE *NextSym (const SYMTYPE * pSym);
-extern __INLINE char *NextType (const char * pType);
+extern __INLINE SYMTYPE * NextSym(const SYMTYPE *sym);
+extern __INLINE char * NextType(const char *type);
 
 /*
  * libpdb uses assertions to catch usage errors when configured with
