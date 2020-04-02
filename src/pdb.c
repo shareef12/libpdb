@@ -524,7 +524,7 @@ static size_t nr_bits_set(
                 if (c & 1) {
                     val++;
                 }
-                c >> 1;
+                c >>= 1;
             }
             table[i] = val;
         }
@@ -698,7 +698,7 @@ static int parse_pubsym_hashtable(
                 ctx->pubsym_hashtab.buckets[i * 8 + j] = NULL;
             }
 
-            c >> 1;
+            c >>= 1;
         }
     }
 
