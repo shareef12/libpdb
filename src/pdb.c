@@ -631,7 +631,6 @@ static int parse_pubsym_hashtable(
 
     /* Iterate through the Present Bit Vector, populate buckets, and fixup hashrec chains */
     uint32_t *buckets = (uint32_t *)(pbitvec + pbitvec_sz + sizeof(uint32_t));
-    size_t buckets_sz = hdr->cb_buckets - pbitvec_sz - sizeof(uint32_t);
     size_t buckets_idx = 0;
 
     for (size_t i = 0; i < pbitvec_sz; i++) {
@@ -740,7 +739,7 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
     }
 
     const struct gsi_hash_header *hash_hdr = (const struct gsi_hash_header *)((unsigned char *)hdr + sizeof(struct gsi_stream_header));
-    if (hash_hdr->ver_signature != -1 || hash_hdr->ver_hdr != gsi_hash_sc_impv_v70) {
+    if (hash_hdr->ver_signature != -1 || hash_hdr->ver_hdr != GSI_HASH_SC_IMPV_V70) {
         ctx->error = EPDB_UNSUPPORTED_VERSION;
         return -1;
     }
@@ -1198,13 +1197,13 @@ const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *name, bool 
     strcmp_fn = case_sensitive ? strcmp : strcasecmp;
 
     /* Hash the symbol and get its bucket from the hashtable */
-    uint16_t hash = hash_mod(name, strlen(name), NR_HASH_BUCKETS);
+    uint16_t hash = hash_mod((unsigned char *)name, strlen(name), NR_HASH_BUCKETS);
     const struct sym_hashrec *item = ctx->pubsym_hashtab.buckets[hash];
 
     /* Traverse the chain until we find the symbol */
     while (item != NULL) {
         const PUBSYM32 *sym = (const PUBSYM32 *)item->sym;
-        if (strcmp_fn(name, sym->name) == 0) {
+        if (strcmp_fn(name, (const char *)sym->name) == 0) {
             return sym;
         }
         item = item->next;

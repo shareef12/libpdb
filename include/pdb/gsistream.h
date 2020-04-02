@@ -1,8 +1,7 @@
 #include <stdint.h>
 
-enum {
-    gsi_hash_sc_impv_v70 = 0xeffe0000 + 19990810,   // 0xf12f091a
-};
+/* gsi_hash_header header versions */
+#define GSI_HASH_SC_IMPV_V70 (0xeffe0000 + 19990810)    /* 0xf12f091a */
 
 struct gsi_stream_header {
     uint32_t sym_hash_size;

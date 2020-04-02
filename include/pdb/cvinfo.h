@@ -4588,7 +4588,7 @@ typedef struct PDBMAP {
 //
 
 enum DEBUG_S_SUBSECTION_TYPE {
-    DEBUG_S_IGNORE = 0x80000000,    // if this bit is set in a subsection type then ignore the subsection contents
+    DEBUG_S_IGNORE = ~0x7fffffff,   // 0x80000000 - if this bit is set in a subsection type then ignore the subsection contents
 
     DEBUG_S_SYMBOLS = 0xf1,
     DEBUG_S_LINES,
