@@ -1,10 +1,4 @@
-set(LIBPDB_SRC
-    pdb.c)
-
-set(PDBPARSE_SRC
-    pdbparse.c)
-
-add_library(pdb_object OBJECT ${LIBPDB_SRC})
+add_library(pdb_object OBJECT pdb.c)
 target_compile_options(pdb_object PRIVATE ${PDB_STRICT_COMPILE_OPTIONS})
 target_include_directories(pdb_object PUBLIC ${PROJECT_SOURCE_DIR}/include)
 set_target_properties(pdb_object
@@ -33,7 +27,7 @@ target_include_directories(pdb_static
   PUBLIC
     $<TARGET_PROPERTY:pdb_object,INTERFACE_INCLUDE_DIRECTORIES>)
 
-add_executable(pdbparse ${PDBPARSE_SRC})
+add_executable(pdbparse pdbparse.c)
 target_compile_options(pdbparse PRIVATE ${PDB_STRICT_COMPILE_OPTIONS})
 target_link_libraries(pdbparse pdb_shared)
 
