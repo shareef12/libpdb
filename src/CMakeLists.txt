@@ -1,15 +1,32 @@
-include_directories(${CMAKE_SOURCE_DIR}/include)
-
 set(LIBPDB_SRC
     pdb.c)
 
 set(PDBPARSE_SRC
     pdbparse.c)
 
-add_library(pdb STATIC ${LIBPDB_SRC})
+add_library(pdb_object OBJECT ${LIBPDB_SRC})
+target_include_directories(pdb_object PUBLIC ${CMAKE_SOURCE_DIR}/include)
+set_target_properties(pdb_object PROPERTIES POSITION_INDEPENDENT_CODE 1)
+
 if(PDB_ENABLE_ASSERTIONS)
-    target_compile_definitions(pdb PRIVATE PDB_ENABLE_ASSERTIONS=1)
+    target_compile_definitions(pdb_object PRIVATE PDB_ENABLE_ASSERTIONS=1)
 endif()
 
+add_library(pdb_static STATIC $<TARGET_OBJECTS:pdb_object>)
+add_library(pdb_shared SHARED $<TARGET_OBJECTS:pdb_object>)
+set_target_properties(pdb_shared PROPERTIES OUTPUT_NAME pdb)
+set_target_properties(pdb_static PROPERTIES OUTPUT_NAME pdb)
+
+# CMake 3.10.x workaround: CMake does not propagate PUBLIC or INTERFACE include
+# directories unless target_link_libraries is used. Since you cannot use
+# target_link_libraries with object libraries until CMake 3.12, we are stuck
+# manually propagating this property until we can upgrade.
+target_include_directories(pdb_shared
+    PUBLIC
+    $<TARGET_PROPERTY:pdb_object,INTERFACE_INCLUDE_DIRECTORIES>)
+target_include_directories(pdb_static
+    PUBLIC
+    $<TARGET_PROPERTY:pdb_object,INTERFACE_INCLUDE_DIRECTORIES>)
+
 add_executable(pdbparse ${PDBPARSE_SRC})
-target_link_libraries(pdbparse pdb)
+target_link_libraries(pdbparse pdb_shared)
