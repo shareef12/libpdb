@@ -197,7 +197,7 @@ void print_public_symbols(void *pdb)
          * information. I suspect this is relative to the base KASLR address
          * computed by the kernel.
          */
-        if (sym->seg - 1 == nr_sections) {
+        if (sym->seg != 0 && (uint32_t)(sym->seg - 1) == nr_sections) {
             sym_rva = sym->off;
             sym_dynamic = " (dynamic)";
         }
