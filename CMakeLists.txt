@@ -6,6 +6,6 @@ project(libpdb
 
 set(PDB_ENABLE_ASSERTIONS TRUE CACHE BOOL "Enable assertions in libpdb")
 
-set(PDB_STRICT_COMPILE_OPTIONS -Wall -Werror -pedantic)
+set(PDB_STRICT_COMPILE_OPTIONS -Wall -Wextra -pedantic)
 
 add_subdirectory(src)
