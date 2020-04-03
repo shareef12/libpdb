@@ -16,7 +16,7 @@ struct gsi_stream_header {
 #define NR_HASH_BUCKETS 4096
 
 struct gsi_hash_header {
-    uint32_t ver_signature;
+    int32_t ver_signature;
     uint32_t ver_hdr;
     uint32_t cb_hr;
     uint32_t cb_buckets;

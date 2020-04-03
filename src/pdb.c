@@ -877,14 +877,14 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     switch (count) {
         do {
             count = 8;
-            hash ^= pdwords[7];
-    case 7: hash ^= pdwords[6];
-    case 6: hash ^= pdwords[5];
-    case 5: hash ^= pdwords[4];
-    case 4: hash ^= pdwords[3];
-    case 3: hash ^= pdwords[2];
-    case 2: hash ^= pdwords[1];
-    case 1: hash ^= pdwords[0];
+            hash ^= pdwords[7]; /* falls through */
+    case 7: hash ^= pdwords[6]; /* falls through */
+    case 6: hash ^= pdwords[5]; /* falls through */
+    case 5: hash ^= pdwords[4]; /* falls through */
+    case 4: hash ^= pdwords[3]; /* falls through */
+    case 3: hash ^= pdwords[2]; /* falls through */
+    case 2: hash ^= pdwords[1]; /* falls through */
+    case 1: hash ^= pdwords[0]; /* falls through */
     case 0: ;
         } while ((pdwords += count) < pdwords_end);
     }
