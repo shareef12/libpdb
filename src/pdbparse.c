@@ -1,20 +1,20 @@
+#include "config.h"
+#include "pdb.h"
+
+#include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "pdb.h"
-
 #define PROGRAM_NAME "pdbparse"
-#define PROGRAM_VERSION "0.1.0"
-#define PROGRAM_LICENSE \
-    "Copyright (c) 2020 Christian Sharpsten\n" \
-    "This program is free software; you may redistribute it under the terms of\n" \
-    "the Expat license. This program has absolutely no warranty."
+#define PROGRAM_VERSION PROJECT_VERSION
+#define PROGRAM_LICENSE PROJECT_LICENSE
 
 /* 32 hex characters + 4 hyphens + enclosing braces */
 #define GUID_STR_SIZE (32 + 4 + 2)
@@ -33,14 +33,14 @@ void * open_pdb_file(const char *pathname)
 {
     int fd = open(pathname, O_RDONLY);
     if (fd < 0) {
-        fprintf(stderr, "Error opening pdb file: %m\n");
+        fprintf(stderr, "Error opening pdb file: %s (%u)\n", strerror(errno), errno);
         return NULL;
     }
 
     struct stat sb = {0};
     int err = fstat(fd, &sb);
     if (err < 0) {
-        fprintf(stderr, "Error getting pdb file size: %m\n");
+        fprintf(stderr, "Error getting pdb file size: %s (%u)\n", strerror(errno), errno);
         close(fd);
         return NULL;
     }
@@ -48,7 +48,7 @@ void * open_pdb_file(const char *pathname)
     void *pdbdata = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
     if (pdbdata == MAP_FAILED) {
-        fprintf(stderr, "Error mapping pdb file: %m\n");
+        fprintf(stderr, "Error mapping pdb file: %s (%u)\n", strerror(errno), errno);
         return NULL;
     }
 

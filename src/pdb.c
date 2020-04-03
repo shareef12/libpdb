@@ -33,8 +33,8 @@
  * Declare these inline functions from cvinfo.h as extern, otherwise they will
  * not be included in our static library and link errors will result.
  */
-extern __INLINE SYMTYPE *NextSym (const SYMTYPE * pSym);
-extern __INLINE char *NextType (const char * pType);
+extern __INLINE SYMTYPE * NextSym(const SYMTYPE *sym);
+extern __INLINE char * NextType(const char *type);
 
 /*
  * libpdb uses assertions to catch usage errors when configured with
@@ -631,7 +631,6 @@ static int parse_pubsym_hashtable(
 
     /* Iterate through the Present Bit Vector, populate buckets, and fixup hashrec chains */
     uint32_t *buckets = (uint32_t *)(pbitvec + pbitvec_sz + sizeof(uint32_t));
-    size_t buckets_sz = hdr->cb_buckets - pbitvec_sz - sizeof(uint32_t);
     size_t buckets_idx = 0;
 
     for (size_t i = 0; i < pbitvec_sz; i++) {
@@ -740,7 +739,7 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
     }
 
     const struct gsi_hash_header *hash_hdr = (const struct gsi_hash_header *)((unsigned char *)hdr + sizeof(struct gsi_stream_header));
-    if (hash_hdr->ver_signature != -1 || hash_hdr->ver_hdr != gsi_hash_sc_impv_v70) {
+    if (hash_hdr->ver_signature != -1 || hash_hdr->ver_hdr != GSI_HASH_SC_IMPV_V70) {
         ctx->error = EPDB_UNSUPPORTED_VERSION;
         return -1;
     }
@@ -878,14 +877,14 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     switch (count) {
         do {
             count = 8;
-            hash ^= pdwords[7];
-    case 7: hash ^= pdwords[6];
-    case 6: hash ^= pdwords[5];
-    case 5: hash ^= pdwords[4];
-    case 4: hash ^= pdwords[3];
-    case 3: hash ^= pdwords[2];
-    case 2: hash ^= pdwords[1];
-    case 1: hash ^= pdwords[0];
+            hash ^= pdwords[7]; /* falls through */
+    case 7: hash ^= pdwords[6]; /* falls through */
+    case 6: hash ^= pdwords[5]; /* falls through */
+    case 5: hash ^= pdwords[4]; /* falls through */
+    case 4: hash ^= pdwords[3]; /* falls through */
+    case 3: hash ^= pdwords[2]; /* falls through */
+    case 2: hash ^= pdwords[1]; /* falls through */
+    case 1: hash ^= pdwords[0]; /* falls through */
     case 0: ;
         } while ((pdwords += count) < pdwords_end);
     }
@@ -1198,13 +1197,13 @@ const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *name, bool 
     strcmp_fn = case_sensitive ? strcmp : strcasecmp;
 
     /* Hash the symbol and get its bucket from the hashtable */
-    uint16_t hash = hash_mod(name, strlen(name), NR_HASH_BUCKETS);
+    uint16_t hash = hash_mod((unsigned char *)name, strlen(name), NR_HASH_BUCKETS);
     const struct sym_hashrec *item = ctx->pubsym_hashtab.buckets[hash];
 
     /* Traverse the chain until we find the symbol */
     while (item != NULL) {
         const PUBSYM32 *sym = (const PUBSYM32 *)item->sym;
-        if (strcmp_fn(name, sym->name) == 0) {
+        if (strcmp_fn(name, (const char *)sym->name) == 0) {
             return sym;
         }
         item = item->next;
