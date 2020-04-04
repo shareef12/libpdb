@@ -1,0 +1,51 @@
+.\"                                      Hey, EMACS: -*- nroff -*-
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>,
+.\"
+.TH PDBPARSE 1 2020-04-04 libpdb
+
+.SH NAME
+pdbparse \- Display information about a PDB file
+
+.SH SYNOPSIS
+.TP 9
+.BR pdbparse " [" \-f | \-\-file\-header ]
+.br
+.RB [ \-S | \-\-section\-headers | \-\-sections ]
+.br
+.RB [ \-s | \-\-syms | \-\-symbols ]
+.br
+.RB [ \-h | \-\-help ]
+.br
+.RB [ \-v | \-\-version ]
+.br
+.I pdbfile
+.LP
+
+.SH DESCRIPTION
+\fBpdbparse\fR displays information about a Microsoft Program Database
+(PDB) file.
+The options control what particular information to display.
+
+\fIpdbfile\fR is the PDB file to be examined.
+
+.SH OPTIONS
+The long and short forms of options, shown here as alternatives, are
+equivalent. At least one options besides \fB\-h\fR or \fB\-v\fR must be
+given.
+.TP
+.B \-f, \-\-file\-header
+Display the PDB file header, including information from the PDB stream.
+.TP
+.B \-S, \-\-section\-headers, \-\-sections
+Display information about an executable's sections.
+.TP
+.B \-s, \-\-syms, \-\-symbols
+Display all public symbols present in the PDB file, including their name
+and relative virtual address (RVA).
+Note that all names are in their mangled form.
+.TP
+.B \-h, \-\-help
+Show summary of options.
+.TP
+.B \-v, \-\-version
+Show version of program.
