@@ -1,6 +1,7 @@
 # Project files
 .vscode/
 build/
+build-area/
 
 # Prerequisites
 *.d

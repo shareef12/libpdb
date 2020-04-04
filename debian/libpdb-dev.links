@@ -1,0 +1,11 @@
+usr/share/man/man3/pdb_create_context.3 usr/share/man/man3/pdb_destroy_context.3
+usr/share/man/man3/pdb_create_context.3 usr/share/man/man3/pdb_reset_context.3
+usr/share/man/man3/pdb_get_header.3 usr/share/man/man3/pdb_get_block_size.3
+usr/share/man/man3/pdb_get_header.3 usr/share/man/man3/pdb_get_nr_blocks.3
+usr/share/man/man3/pdb_get_header.3 usr/share/man/man3/pdb_get_guid.3
+usr/share/man/man3/pdb_get_header.3 usr/share/man/man3/pdb_get_age.3
+usr/share/man/man3/pdb_get_sections.3 usr/share/man/man3/pdb_get_nr_sections.3
+usr/share/man/man3/pdb_get_stream.3 usr/share/man/man3/pdb_get_nr_streams.3
+usr/share/man/man3/pdb_get_symbols.3 usr/share/man/man3/pdb_get_nr_symbols.3
+usr/share/man/man3/pdb_get_symbols.3 usr/share/man/man3/pdb_get_public_symbols.3
+usr/share/man/man3/pdb_get_symbols.3 usr/share/man/man3/pdb_get_nr_public_symbols.3

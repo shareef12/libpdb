@@ -1,0 +1,43 @@
+Source: libpdb
+Priority: optional
+Maintainer: Christian Sharpsten <christian.sharpsten@gmail.com>
+Build-Depends: debhelper (>= 11)
+Standards-Version: 4.1.4
+Section: libs
+Homepage: https://github.com/shareef12/libpdb
+Vcs-Git: https://github.com/shareef12/libpdb.git
+Vcs-Browser: https://github.com/shareef12/libpdb
+
+Package: libpdb0
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: PDB library - runtime
+ libpdb is a library implementing an interface for reading Microsoft
+ PDB (Program Database) files.
+ .
+ This package contains the runtime library files needed to run software
+ using libpdb.
+
+Package: libpdb-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libpdb0 (= ${binary:Version}), ${misc:Depends}
+Description: PDB library - development
+ libpdb is a library implementing an interface for reading Microsoft
+ PDB (Program Database) files.
+ .
+ This package contains the header and development files needed to build
+ programs and packages using libpdb.
+
+Package: pdbparse
+Section: devel
+Architecture: any
+Depends: libpdb0 (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: PDB parser
+ pdbparse is a program that will display information from Microsoft PDB
+ (Program Database) files.
+ .
+ pdbparse supports dumping PDB metadata, image sections, and public
+ symbol information.

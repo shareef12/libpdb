@@ -1,0 +1,9 @@
+# We do not provide a test suite
+libpdb source: testsuite-autopkgtest-missing
+
+# We do not provide an upstream metadata file
+libpdb source: upstream-metadata-file-is-missing
+
+# Instead of downloading upstream tarballs for new releases, we build them
+# directly from a tag in their git history.
+libpdb source: debian-watch-file-is-missing
