@@ -30,6 +30,10 @@ target_include_directories(pdb_object_interface
 add_library(pdb SHARED $<TARGET_OBJECTS:pdb_object>)
 set_target_properties(pdb PROPERTIES OUTPUT_NAME pdb)
 target_link_libraries(pdb PUBLIC pdb_object_interface)
+set_target_properties(pdb
+  PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR})
 
 add_library(pdb_static STATIC $<TARGET_OBJECTS:pdb_object>)
 set_target_properties(pdb_static PROPERTIES OUTPUT_NAME pdb)
