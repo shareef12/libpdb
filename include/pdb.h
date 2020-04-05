@@ -61,7 +61,7 @@ PDB_EXPORT void * pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free
 PDB_EXPORT void pdb_reset_context(void *context);
 PDB_EXPORT void pdb_destroy_context(void *context);
 
-PDB_EXPORT int pdb_load(void *context, const void *pdbdata, size_t len);
+PDB_EXPORT int pdb_load(void *context, const void *pdbdata, size_t length);
 
 
 PDB_EXPORT void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_streams);
