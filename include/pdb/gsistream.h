@@ -1,7 +1,10 @@
+#ifndef PDB_GSISTREAM_H
+#define PDB_GSISTREAM_H
+
 #include <stdint.h>
 
 /* gsi_hash_header header versions */
-#define GSI_HASH_SC_IMPV_V70 (0xeffe0000 + 19990810)    /* 0xf12f091a */
+#define GSI_HASH_SC_IMPV_V70 (0xeffe0000 + 19990810) /* 0xf12f091a */
 
 struct gsi_stream_header {
     uint32_t sym_hash_size;
@@ -34,3 +37,5 @@ struct gsi_hashrec_offset_calc {
     int32_t psym;
     int32_t c_ref;
 };
+
+#endif  // PDB_GSISTREAM_H

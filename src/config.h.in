@@ -1,4 +1,4 @@
-#ifndef PDB_CONFIG_H
+#ifndef PDB_CONFIG_H /* NOLINT(llvm-header-guard) */
 #define PDB_CONFIG_H
 
 #define PROJECT_NAME "@PROJECT_NAME@"
@@ -7,9 +7,9 @@
 #define PROJECT_VERSION_MINOR "@PROJECT_VERSION_MINOR@"
 #define PROJECT_VERSION_PATCH "@PROJECT_VERSION_PATCH@"
 
-#define PROJECT_LICENSE \
-    "Copyright (c) 2020 Christian Sharpsten\n" \
+#define PROJECT_LICENSE                                                           \
+    "Copyright (c) 2020 Christian Sharpsten\n"                                    \
     "This program is free software; you may redistribute it under the terms of\n" \
     "the Expat license. This program has absolutely no warranty."
 
-#endif // PDB_CONFIG_H
+#endif  // PDB_CONFIG_H

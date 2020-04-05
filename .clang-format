@@ -1,0 +1,12 @@
+---
+BasedOnStyle:  Google
+
+AlignAfterOpenBracket: AlwaysBreak
+AlignOperands: false
+AllowShortFunctionsOnASingleLine: Inline
+BinPackParameters: false
+BreakBeforeBraces: Stroustrup
+ColumnLimit: 100
+IndentCaseLabels: false
+IndentWidth: 4
+...

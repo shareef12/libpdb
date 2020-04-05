@@ -23,4 +23,4 @@ struct pdb_stream_header {
     unsigned char unique_id[16];
 } __attribute__((packed));
 
-#endif // PDB_PDBSTREAM_H
+#endif  // PDB_PDBSTREAM_H

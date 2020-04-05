@@ -2,8 +2,8 @@
 
 #include "pdb/dbistream.h"
 #include "pdb/gsistream.h"
-#include "pdb/pdbstream.h"
 #include "pdb/msf.h"
+#include "pdb/pdbstream.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -13,8 +13,8 @@
 #include <string.h>
 #include <strings.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <signal.h>
@@ -22,19 +22,21 @@
 
 #ifdef PDB_ENABLE_ASSERTIONS
 #include <assert.h>
-#endif // PDB_ENABLE_ASSERTIONS
+#endif  // PDB_ENABLE_ASSERTIONS
 
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
-#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*(array)))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 /*
  * Declare these inline functions from cvinfo.h as extern, otherwise they will
  * not be included in our static library and link errors will result.
  */
-extern __INLINE SYMTYPE * NextSym(const SYMTYPE *sym);
-extern __INLINE char * NextType(const char *type);
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
+extern __INLINE SYMTYPE *NextSym(const SYMTYPE *pSym);
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
+extern __INLINE char *NextType(const char *pType);
 
 /*
  * libpdb uses assertions to catch usage errors when configured with
@@ -52,27 +54,30 @@ extern __INLINE char * NextType(const char *type);
 
 #define PDB_ASSERT(expr)
 
-#define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) do {       \
-        if ((ctx) == NULL) {                            \
-            return (retval);                            \
-        }                                               \
+#define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) \
+    do {                                     \
+        if ((ctx) == NULL) {                 \
+            return (retval);                 \
+        }                                    \
     } while (0)
 
-#define PDB_ASSERT_PDB_LOADED(ctx, retval) do {         \
-        if (!(ctx)->pdb_loaded) {                       \
-            (ctx)->error = EPDB_NO_PDB_LOADED;          \
-            return (retval);                            \
-        }                                               \
+#define PDB_ASSERT_PDB_LOADED(ctx, retval)     \
+    do {                                       \
+        if (!(ctx)->pdb_loaded) {              \
+            (ctx)->error = EPDB_NO_PDB_LOADED; \
+            return (retval);                   \
+        }                                      \
     } while (0)
 
-#define PDB_ASSERT_PARAMETER(ctx, retval, expr) do {    \
-        if (!(expr)) {                                  \
-            (ctx)->error = EPDB_INVALID_PARAMETER;      \
-            return (retval);                            \
-        }                                               \
+#define PDB_ASSERT_PARAMETER(ctx, retval, expr)    \
+    do {                                           \
+        if (!(expr)) {                             \
+            (ctx)->error = EPDB_INVALID_PARAMETER; \
+            return (retval);                       \
+        }                                          \
     } while (0)
 
-#endif // PDB_ENABLE_ASSERTIONS
+#endif  // PDB_ENABLE_ASSERTIONS
 
 struct stream {
     uint32_t size;
@@ -124,7 +129,6 @@ struct pdb_context {
     struct sym_hashtable pubsym_hashtab;
 };
 
-
 static const char *errstrings[] = {
     "No error",
     "System error",
@@ -138,8 +142,8 @@ static const char *errstrings[] = {
     "Not found",
 };
 
-
-static void initialize_pdb_context(struct pdb_context *ctx, malloc_fn user_malloc_fn, free_fn user_free_fn)
+static void initialize_pdb_context(
+    struct pdb_context *ctx, malloc_fn user_malloc_fn, free_fn user_free_fn)
 {
     memset(ctx, 0, sizeof(*ctx));
 
@@ -150,7 +154,6 @@ static void initialize_pdb_context(struct pdb_context *ctx, malloc_fn user_mallo
     ctx->pdb_loaded = false;
     ctx->symbol_streams_parsed = false;
 }
-
 
 static void cleanup_pdb_context(struct pdb_context *ctx)
 {
@@ -167,7 +170,6 @@ static void cleanup_pdb_context(struct pdb_context *ctx)
     memset(ctx, 0, sizeof(*ctx));
 }
 
-
 static size_t nr_blocks(size_t count, size_t block_size)
 {
     PDB_ASSERT(block_size != 0);
@@ -177,13 +179,13 @@ static size_t nr_blocks(size_t count, size_t block_size)
     return 1 + ((count - 1) / block_size);
 }
 
-
 static bool valid_superblock(const struct superblock *sb, size_t len)
 {
     if (len < sizeof(struct superblock)) {
         return false;
     }
 
+    /* clang-format off */
     bool valid =
         memcmp(sb->file_magic, PDB_SIGNATURE, PDB_SIGNATURE_SZ) == 0 &&
         sb->num_blocks > 0 &&
@@ -191,21 +193,21 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
         sb->free_block_map_block < sb->num_blocks &&
         sb->num_directory_bytes > 0 &&
         sb->block_map_addr < sb->num_blocks;
+    /* clang-format on */
 
     switch (sb->block_size) {
-        case 512:
-        case 1024:
-        case 2048:
-        case 4096:
-            break;
-        default:
-            valid = false;
-            break;
+    case 512:
+    case 1024:
+    case 2048:
+    case 4096:
+        break;
+    default:
+        valid = false;
+        break;
     }
 
     return valid;
 }
-
 
 static int extract_stream_directory(
     struct pdb_context *ctx,
@@ -256,9 +258,7 @@ static int extract_stream_directory(
     }
 
     size_t computed_sdir_size =
-        sizeof(uint32_t) +
-        num_streams * sizeof(uint32_t) +
-        total_blocks * sizeof(uint32_t);
+        sizeof(uint32_t) + num_streams * sizeof(uint32_t) + total_blocks * sizeof(uint32_t);
     if (computed_sdir_size != sb->num_directory_bytes) {
         /* Malformed pdb - incorrect stream directory size */
         ctx->error = EPDB_FILE_CORRUPT;
@@ -273,7 +273,6 @@ err_free_sd:
     free(sd);
     return -1;
 }
-
 
 static int do_extract_streams(
     struct pdb_context *ctx,
@@ -329,11 +328,7 @@ err_free_strms:
     return -1;
 }
 
-
-static int extract_streams(
-    struct pdb_context *ctx,
-    const unsigned char *pdbdata,
-    size_t len)
+static int extract_streams(struct pdb_context *ctx, const unsigned char *pdbdata, size_t len)
 {
     const struct superblock *sb = (struct superblock *)pdbdata;
     bool valid = valid_superblock(sb, len);
@@ -372,7 +367,6 @@ static int extract_streams(
     return 0;
 }
 
-
 static int parse_pdb_stream(struct pdb_context *ctx)
 {
     if (PDB_STREAM_IDX >= ctx->nr_streams) {
@@ -403,7 +397,6 @@ static int parse_pdb_stream(struct pdb_context *ctx)
     return 0;
 }
 
-
 static int parse_dbi_stream(struct pdb_context *ctx)
 {
     if (DBI_STREAM_IDX >= ctx->nr_streams) {
@@ -427,22 +420,16 @@ static int parse_dbi_stream(struct pdb_context *ctx)
     }
 
     if (hdr->global_stream_index >= ctx->nr_streams ||
-        hdr->public_stream_index >= ctx->nr_streams ||
-        hdr->sym_record_stream >= ctx->nr_streams ||
+        hdr->public_stream_index >= ctx->nr_streams || hdr->sym_record_stream >= ctx->nr_streams ||
         hdr->mfc_type_server_index >= ctx->nr_streams) {
         /* Malformed PDB - bad stream index */
         ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
 
-    uint32_t total_sz = sizeof(struct dbi_stream_header) +
-        hdr->mod_info_size +
-        hdr->section_contribution_size +
-        hdr->section_map_size +
-        hdr->source_info_size +
-        hdr->type_server_map_size +
-        hdr->optional_dbg_header_size +
-        hdr->ec_substream_size;
+    uint32_t total_sz = sizeof(struct dbi_stream_header) + hdr->mod_info_size +
+        hdr->section_contribution_size + hdr->section_map_size + hdr->source_info_size +
+        hdr->type_server_map_size + hdr->optional_dbg_header_size + hdr->ec_substream_size;
     if (total_sz != stream->size) {
         /* Malformed PDB - bad stream size */
         ctx->error = EPDB_FILE_CORRUPT;
@@ -455,8 +442,10 @@ static int parse_dbi_stream(struct pdb_context *ctx)
     /* TODO: Parse section contribution substream */
     const void *schdr = (char *)mihdr + hdr->mod_info_size;
 
-    const struct section_map_header *smhdr = (const struct section_map_header *)((char *)schdr + hdr->section_contribution_size);
-    if (sizeof(struct section_map_header) + sizeof(struct section_map_entry) * smhdr->count > hdr->section_map_size) {
+    const struct section_map_header *smhdr =
+        (const struct section_map_header *)((char *)schdr + hdr->section_contribution_size);
+    if (sizeof(struct section_map_header) + sizeof(struct section_map_entry) * smhdr->count >
+        hdr->section_map_size) {
         /* Malformed PDB - bad substream size */
         ctx->error = EPDB_FILE_CORRUPT;
         return -1;
@@ -471,7 +460,8 @@ static int parse_dbi_stream(struct pdb_context *ctx)
     /* TODO: Parse EC substream */
     const void *echdr = (char *)smaphdr + hdr->type_server_map_size;
 
-    const struct debug_header *dbghdr = (const struct debug_header *)((char *)echdr + hdr->ec_substream_size);
+    const struct debug_header *dbghdr =
+        (const struct debug_header *)((char *)echdr + hdr->ec_substream_size);
     if (sizeof(struct debug_header) > hdr->optional_dbg_header_size) {
         /* Malformed PDB - invalid substream size */
         ctx->error = EPDB_FILE_CORRUPT;
@@ -503,10 +493,7 @@ static int parse_dbi_stream(struct pdb_context *ctx)
     return 0;
 }
 
-
-static size_t nr_bits_set(
-    unsigned char *bitvector,
-    size_t bitvector_size)
+static size_t nr_bits_set(const unsigned char *bitvector, size_t bitvector_size)
 {
     /*
      * Compute a static memoized table - this is still thread-safe because the
@@ -514,17 +501,17 @@ static size_t nr_bits_set(
      * table will not cause issues.
      */
     static bool table_computed = false;
-    static unsigned char table[256] = {0};
+    static uint8_t table[256] = {0};
 
     if (!table_computed) {
-        for (int i = 0; i < 256; i++) {
-            unsigned char val = 0;
-            int c = i;
+        for (uint8_t i = 0; i < UINT8_MAX; i++) {
+            uint8_t val = 0;
+            uint8_t c = i;
             for (int j = 0; j < 8 && c != 0; j++) {
-                if (c & 1) {
+                if (c & 1u) {
                     val++;
                 }
-                c >>= 1;
+                c >>= 1u;
             }
             table[i] = val;
         }
@@ -539,10 +526,7 @@ static size_t nr_bits_set(
     return nr_set;
 }
 
-
-static int parse_pubsym_hashtable(
-    struct pdb_context *ctx,
-    const struct gsi_hash_header *hdr)
+static int parse_pubsym_hashtable(struct pdb_context *ctx, const struct gsi_hash_header *hdr)
 {
     struct sym_hashrec *hashrecs = NULL;
 
@@ -575,7 +559,8 @@ static int parse_pubsym_hashtable(
      * WARNING: The offsets in each hash record are biased by 1, so that it is
      *  possible to differentiate between 0-based offsets and NULL.
      */
-    const struct gsi_hashrec *hr = (const struct gsi_hashrec *)((unsigned char *)hdr + sizeof(struct gsi_hash_header));
+    const struct gsi_hashrec *hr =
+        (const struct gsi_hashrec *)((unsigned char *)hdr + sizeof(struct gsi_hash_header));
     for (uint32_t i = 0; i < nr_hashrecs; i++) {
         if (hr[i].offset == 0) {
             /* Malformed PDB - all hash records must have an offset */
@@ -591,8 +576,7 @@ static int parse_pubsym_hashtable(
 
         SYMTYPE *sym = (SYMTYPE *)(symrec_stream->data + sym_offset);
         uint32_t sym_size = sizeof(uint16_t) + sym->reclen;
-        if (sym_offset + sym_size > symrec_stream->size ||
-            sym_offset + sym_size < sym_offset) {
+        if (sym_offset + sym_size > symrec_stream->size || sym_offset + sym_size < sym_offset) {
             /* Malformed PDB - invalid symbol size */
             goto err_pdb_corrupt;
         }
@@ -603,7 +587,7 @@ static int parse_pubsym_hashtable(
         /* The symbol is valid! Initialize the hash record. */
         hashrecs[i].sym = sym;
         hashrecs[i].c_ref = hr[i].c_ref;
-        hashrecs[i].next = &hashrecs[i+1];
+        hashrecs[i].next = &hashrecs[i + 1];
     }
 
     /*
@@ -634,9 +618,9 @@ static int parse_pubsym_hashtable(
     size_t buckets_idx = 0;
 
     for (size_t i = 0; i < pbitvec_sz; i++) {
-        char c = pbitvec[i];
+        unsigned char c = pbitvec[i];
         for (int j = 0; j < 8 && c != 0; j++) {
-            if (c & 1) {
+            if (c & 1u) {
                 /* The bucket has a chain */
 
                 if (buckets_idx >= nr_full_buckets) {
@@ -652,7 +636,10 @@ static int parse_pubsym_hashtable(
                     chain_end_off = nr_hashrecs * sizeof(struct gsi_hashrec_offset_calc);
                 }
                 else {
-                    /* This is an intermediate bucket - its chain lasts until the next full bucket's chain start */
+                    /*
+                     * This is an intermediate bucket - its chain lasts until the next full bucket's
+                     * chain start
+                     */
                     chain_end_off = buckets[buckets_idx + 1];
                 }
 
@@ -667,14 +654,21 @@ static int parse_pubsym_hashtable(
                     chain_end_off % sizeof(struct gsi_hashrec_offset_calc) != 0) {
                     goto err_pdb_corrupt;
                 }
-                chain_start_off = chain_start_off / sizeof(struct gsi_hashrec_offset_calc) * sizeof(struct gsi_hashrec);
-                chain_end_off = chain_end_off / sizeof(struct gsi_hashrec_offset_calc) * sizeof(struct gsi_hashrec);
+                chain_start_off = chain_start_off / sizeof(struct gsi_hashrec_offset_calc) *
+                    sizeof(struct gsi_hashrec);
+                chain_end_off = chain_end_off / sizeof(struct gsi_hashrec_offset_calc) *
+                    sizeof(struct gsi_hashrec);
 
-                /* Validate the offsets for the bucket's chain */
-                if (hdr->cb_hr < chain_end_off ||                           /* chain must be in the stream */
-                    chain_end_off <= chain_start_off ||                     /* start < end */
-                    chain_start_off % sizeof(struct gsi_hashrec) != 0 ||    /* start must be on a hashrec boundary */
-                    (chain_end_off - chain_start_off) % sizeof(struct gsi_hashrec) != 0) {  /* start and end are properly aligned */
+                /*
+                 * Validate the offsets for the bucket's chain. Verify that:
+                 *  1. all hashrecs are contained in the stream
+                 *  2. start < end
+                 *  3. start is on a hashrec boundary
+                 *  4. start and end are properly aligned
+                 */
+                if (hdr->cb_hr < chain_end_off || chain_end_off <= chain_start_off ||
+                    chain_start_off % sizeof(struct gsi_hashrec) != 0 ||
+                    (chain_end_off - chain_start_off) % sizeof(struct gsi_hashrec) != 0) {
                     /* Malformed pdb - invalid chain indicies */
                     goto err_pdb_corrupt;
                 }
@@ -685,7 +679,8 @@ static int parse_pubsym_hashtable(
                  * appropriately.
                  */
                 uint32_t chain_start_idx = chain_start_off / sizeof(struct gsi_hashrec);
-                uint32_t nr_hashrecs_in_chain = (chain_end_off - chain_start_off) / sizeof(struct gsi_hashrec);
+                uint32_t nr_hashrecs_in_chain =
+                    (chain_end_off - chain_start_off) / sizeof(struct gsi_hashrec);
 
                 ctx->pubsym_hashtab.buckets[i * 8 + j] = &hashrecs[chain_start_idx];
                 hashrecs[chain_start_idx + nr_hashrecs_in_chain - 1].next = NULL;
@@ -697,7 +692,7 @@ static int parse_pubsym_hashtable(
                 ctx->pubsym_hashtab.buckets[i * 8 + j] = NULL;
             }
 
-            c >>= 1;
+            c >>= 1u;
         }
     }
 
@@ -715,7 +710,6 @@ err_pdb_corrupt:
     ctx->error = EPDB_FILE_CORRUPT;
     return -1;
 }
-
 
 static int parse_public_symbol_stream(struct pdb_context *ctx)
 {
@@ -738,13 +732,15 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
         return -1;
     }
 
-    const struct gsi_hash_header *hash_hdr = (const struct gsi_hash_header *)((unsigned char *)hdr + sizeof(struct gsi_stream_header));
+    const struct gsi_hash_header *hash_hdr =
+        (const struct gsi_hash_header *)((unsigned char *)hdr + sizeof(struct gsi_stream_header));
     if (hash_hdr->ver_signature != -1 || hash_hdr->ver_hdr != GSI_HASH_SC_IMPV_V70) {
         ctx->error = EPDB_UNSUPPORTED_VERSION;
         return -1;
     }
 
-    if (sizeof(struct gsi_hash_header) + hash_hdr->cb_hr + hash_hdr->cb_buckets != hdr->sym_hash_size) {
+    if (sizeof(struct gsi_hash_header) + hash_hdr->cb_hr + hash_hdr->cb_buckets !=
+        hdr->sym_hash_size) {
         ctx->error = EPDB_FILE_CORRUPT;
         return -1;
     }
@@ -755,7 +751,6 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
 
     return 0;
 }
-
 
 static int parse_symbol_record_stream(struct pdb_context *ctx)
 {
@@ -807,7 +802,6 @@ static int parse_symbol_record_stream(struct pdb_context *ctx)
     return 0;
 }
 
-
 static int parse_symbol_streams(struct pdb_context *ctx)
 {
     if (parse_symbol_record_stream(ctx) < 0) {
@@ -833,7 +827,6 @@ static int parse_symbol_streams(struct pdb_context *ctx)
     return 0;
 }
 
-
 static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool public_only)
 {
     PDB_ASSERT(ctx->symbol_streams_parsed);
@@ -846,7 +839,7 @@ static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool p
     for (size_t i = 0, j = 0; i < ctx->nr_symbols; i++) {
         if (public_only) {
             if (sym->rectyp == S_PUB32) {
-                symbols[j++] =sym;
+                symbols[j++] = sym;
             }
         }
         else {
@@ -856,7 +849,6 @@ static void get_symbols(struct pdb_context *ctx, const SYMTYPE **symbols, bool p
         sym = NextSym(sym);
     }
 }
-
 
 /**
  * Hash a buffer in a case-insensitive manner.
@@ -869,11 +861,13 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     uint32_t hash = 0;
 
     /* Hash leading dwords using Duff's Device */
-    size_t nr_dwords = length >> 2;
+    size_t nr_dwords = length >> 2u;
     uint32_t *pdwords = (uint32_t *)data;
     uint32_t *pdwords_end = pdwords + nr_dwords;
-    size_t count = nr_dwords & 7;
+    size_t count = nr_dwords & 7u;
 
+    /* clang-format off */
+    /* NOLINTNEXTLINE(hicpp-multiway-paths-covered) */
     switch (count) {
         do {
             count = 8;
@@ -888,37 +882,36 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     case 0: ;
         } while ((pdwords += count) < pdwords_end);
     }
+    /* clang-format on */
 
     data = (unsigned char *)pdwords;
 
     /* Hash possible odd word */
-    if (length & 2) {
+    if (length & 2u) {
         hash ^= *(uint16_t *)data;
         data += sizeof(uint16_t);
     }
 
     /* Hash possible odd byte */
-    if (length & 1) {
+    if (length & 1u) {
         hash ^= *data;
         data++;
     }
 
     const uint32_t to_lower_mask = 0x20202020;
     hash |= to_lower_mask;
-    hash ^= (hash >> 11);
+    hash ^= (hash >> 11u);
 
-    hash = (hash ^ (hash >> 16)) % modulus;
-    return (uint16_t)(hash & 0xffff);
+    hash = (hash ^ (hash >> 16u)) % modulus;
+    return (uint16_t)(hash & 0xffffu);
 }
-
 
 bool pdb_sig_match(void *data, size_t len)
 {
     return memcmp(data, PDB_SIGNATURE, min(len, PDB_SIGNATURE_SZ)) == 0;
 }
 
-
-void * pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn)
+void *pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn)
 {
     user_malloc_fn = user_malloc_fn ? user_malloc_fn : malloc;
     user_free_fn = user_free_fn ? user_free_fn : free;
@@ -932,7 +925,6 @@ void * pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn)
 
     return ctx;
 }
-
 
 void pdb_reset_context(void *context)
 {
@@ -948,7 +940,6 @@ void pdb_reset_context(void *context)
     initialize_pdb_context(ctx, user_malloc_fn, user_free_fn);
 }
 
-
 void pdb_destroy_context(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -961,7 +952,6 @@ void pdb_destroy_context(void *context)
     cleanup_pdb_context(ctx);
     user_free_fn(ctx);
 }
-
 
 int pdb_load(void *context, const void *pdbdata, size_t length)
 {
@@ -982,7 +972,7 @@ int pdb_load(void *context, const void *pdbdata, size_t length)
         return -1;
     }
 
-    if (parse_dbi_stream(ctx) < 0) {;
+    if (parse_dbi_stream(ctx) < 0) {
         return -1;
     }
 
@@ -994,11 +984,17 @@ int pdb_load(void *context, const void *pdbdata, size_t length)
     return 0;
 }
 
-
-void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_streams)
+void pdb_get_header(
+    void *context,
+    uint32_t *block_size,
+    uint32_t *nr_blocks,
+    const struct guid **guid,
+    uint32_t *age,
+    uint32_t *nr_streams)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
+    /* clang-format off */
     if (ctx == NULL || !ctx->pdb_loaded ||
         block_size == NULL ||
         nr_blocks == NULL ||
@@ -1007,6 +1003,7 @@ void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, co
         nr_streams == NULL) {
         return;
     }
+    /* clang-format on */
 
     *block_size = ctx->block_size;
     *nr_blocks = ctx->nr_blocks;
@@ -1014,7 +1011,6 @@ void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, co
     *age = ctx->age;
     *nr_streams = ctx->nr_streams;
 }
-
 
 uint32_t pdb_get_block_size(void *context)
 {
@@ -1026,7 +1022,6 @@ uint32_t pdb_get_block_size(void *context)
     return ctx->block_size;
 }
 
-
 uint32_t pdb_get_nr_blocks(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1037,8 +1032,7 @@ uint32_t pdb_get_nr_blocks(void *context)
     return ctx->nr_blocks;
 }
 
-
-const struct guid * pdb_get_guid(void *context)
+const struct guid *pdb_get_guid(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1047,7 +1041,6 @@ const struct guid * pdb_get_guid(void *context)
 
     return &ctx->guid;
 }
-
 
 uint32_t pdb_get_age(void *context)
 {
@@ -1059,7 +1052,6 @@ uint32_t pdb_get_age(void *context)
     return ctx->age;
 }
 
-
 uint32_t pdb_get_nr_streams(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1070,8 +1062,7 @@ uint32_t pdb_get_nr_streams(void *context)
     return ctx->nr_streams;
 }
 
-
-const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size)
+const unsigned char *pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1088,7 +1079,6 @@ const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_
     return ctx->streams[stream_idx].data;
 }
 
-
 uint32_t pdb_get_nr_sections(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1099,8 +1089,7 @@ uint32_t pdb_get_nr_sections(void *context)
     return ctx->nr_sections;
 }
 
-
-const struct image_section_header * pdb_get_sections(void *context)
+const struct image_section_header *pdb_get_sections(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1109,7 +1098,6 @@ const struct image_section_header * pdb_get_sections(void *context)
 
     return ctx->sections;
 }
-
 
 int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
 {
@@ -1130,7 +1118,6 @@ int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
     return 0;
 }
 
-
 int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1143,7 +1130,6 @@ int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
 
     return 0;
 }
-
 
 int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols)
 {
@@ -1164,7 +1150,6 @@ int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols)
     return 0;
 }
 
-
 int pdb_get_symbols(void *context, const SYMTYPE **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1178,8 +1163,7 @@ int pdb_get_symbols(void *context, const SYMTYPE **symbols)
     return 0;
 }
 
-
-const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *name, bool case_sensitive)
+const PUBSYM32 *pdb_lookup_public_symbol(void *context, const char *name, bool case_sensitive)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1213,8 +1197,8 @@ const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *name, bool 
     return NULL;
 }
 
-
-int pdb_convert_section_offset_to_rva(void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva)
+int pdb_convert_section_offset_to_rva(
+    void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1247,7 +1231,6 @@ int pdb_convert_section_offset_to_rva(void *context, uint16_t section_idx, uint3
     return 0;
 }
 
-
 pdb_errno_t pdb_errno(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1256,8 +1239,7 @@ pdb_errno_t pdb_errno(void *context)
     return ctx->error;
 }
 
-
-const char * pdb_strerror(void *context)
+const char *pdb_strerror(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
     PDB_ASSERT_CTX_NOT_NULL(ctx, NULL);

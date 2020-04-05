@@ -1,0 +1,20 @@
+language: c
+dist: bionic
+
+compiler:
+  - clang
+  - gcc
+
+before_install:
+  - sudo apt-get install -y clang-tidy cppcheck
+
+script:
+  - mkdir build && cd build
+  - >
+    cmake
+    '-DCMAKE_C_FLAGS=-Werror'
+    '-DCMAKE_C_CLANG_TIDY=clang-tidy;-checks=*;-header-filter=.*;-warnings-as-errors=*'
+    '-DCMAKE_C_CPPCHECK=cppcheck;--std=c11;--error-exitcode=2'
+    '-DCMAKE_LINK_WHAT_YOU_USE=TRUE'
+    ../
+  - make

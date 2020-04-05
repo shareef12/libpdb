@@ -20,8 +20,8 @@
 // Copyright Microsoft Corporation.  All Rights Reserved.
 //
 //---------------------------------------------------------------
-#ifndef _CVCONST_H_
-#define _CVCONST_H_
+#ifndef PDB_CVCONST_H
+#define PDB_CVCONST_H
 
 
 
@@ -3737,4 +3737,4 @@ typedef enum CV_HLSLMemorySpace_e
     CV_HLSL_MEMSPACE_MAX          = 0x0F,
 } CV_HLSLMemorySpace_e;
 
-#endif
+#endif  // PDB_CVCONST_H

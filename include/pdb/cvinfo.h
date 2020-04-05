@@ -30,14 +30,14 @@
  *
  */
 
+#ifndef PDB_CVINFO_H
+#define PDB_CVINFO_H
+
 #include "cvconst.h"
 
 #if defined(__unix__)
 #include <stdint.h>
 #endif
-
-#ifndef _CV_INFO_INCLUDED
-#define _CV_INFO_INCLUDED
 
 #ifdef  __cplusplus
 #pragma warning ( disable: 4200 )
@@ -303,19 +303,19 @@ typedef enum CV_int_e {
 #define CV_TYP_IS_FPTR32(typ)   (CV_MODE(typ) == CV_TM_FPTR32)
 
 #define CV_TYP_IS_SIGNED(typ)   (((CV_TYPE(typ) == CV_SIGNED) && CV_TYP_IS_DIRECT(typ)) || \
-                                 (typ == T_INT1)  || \
-                                 (typ == T_INT2)  || \
-                                 (typ == T_INT4)  || \
-                                 (typ == T_INT8)  || \
-                                 (typ == T_INT16) || \
-                                 (typ == T_RCHAR))
+                                 ((typ) == T_INT1)  || \
+                                 ((typ) == T_INT2)  || \
+                                 ((typ) == T_INT4)  || \
+                                 ((typ) == T_INT8)  || \
+                                 ((typ) == T_INT16) || \
+                                 ((typ) == T_RCHAR))
 
 #define CV_TYP_IS_UNSIGNED(typ) (((CV_TYPE(typ) == CV_UNSIGNED) && CV_TYP_IS_DIRECT(typ)) || \
-                                 (typ == T_UINT1) || \
-                                 (typ == T_UINT2) || \
-                                 (typ == T_UINT4) || \
-                                 (typ == T_UINT8) || \
-                                 (typ == T_UINT16))
+                                 ((typ) == T_UINT1) || \
+                                 ((typ) == T_UINT2) || \
+                                 ((typ) == T_UINT4) || \
+                                 ((typ) == T_UINT8) || \
+                                 ((typ) == T_UINT16))
 
 #define CV_TYP_IS_REAL(typ)     ((CV_TYPE(typ) == CV_REAL)  && CV_TYP_IS_DIRECT(typ))
 
@@ -4588,7 +4588,7 @@ typedef struct PDBMAP {
 //
 
 enum DEBUG_S_SUBSECTION_TYPE {
-    DEBUG_S_IGNORE = ~0x7fffffff,   // 0x80000000 - if this bit is set in a subsection type then ignore the subsection contents
+    #define DEBUG_S_IGNORE 0x80000000   /* if this bit is set in a subsection type then ignore the subsection contents */
 
     DEBUG_S_SYMBOLS = 0xf1,
     DEBUG_S_LINES,
@@ -5016,4 +5016,4 @@ inline __int32 DecodeSignedInt32(unsigned __int32 input)
 #endif
 #pragma pack ( pop )
 
-#endif /* CV_INFO_INCLUDED */
+#endif /* PDB_CVINFO_H */
