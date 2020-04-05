@@ -1,0 +1,171 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_GET_SYMBOLS 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_get_symbols, pdb_get_nr_symbols, pdb_get_public_symbols, pdb_get_nr_public_symbols \- enumerate PDB symbols
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "int pdb_get_symbols(void *" context ", const struct SYMTYPE **" symbols );
+.BI "int pdb_get_nr_symbols(void *" context ", uint32_t *" nr_symbols );
+.PP
+.BI "int pdb_get_public_symbols(void *" context ", const struct PUBSYM32 **" symbols );
+.BI "int pdb_get_nr_public_symbols(void *" context ", uint32_t *" nr_symbols );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_get_symbols ()
+enumerates all public and global symbols in the PDB file referenced by
+.I context
+and stores a pointer to each symbol in
+.IR symbols .
+.I symbols
+is an array of pointers to SYMTYPE objects allocated by the caller.
+.BR pdb_get_nr_symbols ()
+returns the number of symbols in the PDB in
+.IR nr_symbols .
+.PP
+.BR pdb_get_public_symbols ()
+and
+.BR pdb_get_nr_public_symbols ()
+behave similarly, but only return information for public symbols.
+.PP
+Callers should use
+.BR pdb_get_nr_symbols ()
+and
+.BR pdb_get_nr_public_symbols ()
+to determine the required array size for
+.BR pdb_get_symbols ()
+and
+.BR pdb_get_public_symbols ().
+.SS The SYMTYPE and PUBSYM32 structures
+All symbols have the
+.B SYMTYPE
+structure as a common header.
+.PP
+.nf
+typedef struct SYMTYPE {
+    unsigned short      reclen;     // Record length
+    unsigned short      rectyp;     // Record type
+    char                data[CV_ZEROLEN];
+} SYMTYPE;
+.fi
+.PP
+Note that the
+.I reclen
+field indicates the full size of the symbol not including the
+.I reclen
+member itself.
+Thus, the size of a symbol with a SYMTYPE header is always
+.BR "(((struct SYMTYPE *)sym)->reclen + sizeof(unsigned short))" .
+.PP
+The PUBSYM32 struct describes a public symbol.
+.PP
+.nf
+typedef struct PUBSYM32 {
+    unsigned short  reclen;     // Record length
+    unsigned short  rectyp;     // S_PUB32
+    CV_PUBSYMFLAGS  pubsymflags;
+    CV_uoff32_t     off;
+    unsigned short  seg;
+    unsigned char   name[1];
+} PUBSYM32;
+.fi
+.PP
+Public symbols do not directly indicate their address.
+To find the Relative Virtual Address (RVA) for a public symbol, use
+.BR pdb_convert_section_offset_to_rva (3)
+with the symbol's
+.I seg
+and
+.I off
+fields as the section index and offset.
+
+.SH RETURN VALUE
+.BR pdb_get_symbols (),
+.BR pdb_get_nr_symbols (),
+.BR pdb_get_public_symbols (),
+and
+.BR pdb_get_nr_public_symbols ()
+return 0 on success, or -1 on error.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_ALLOCATION_FAILURE
+There was an internal error allocating memory.
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required output parameter was NULL.
+.TP
+.B EPDB_UNSUPPORTED_VERSION
+The parser encountered an unsupported version in the PDB file.
+.TP
+.B EPDB_PARSE_ERROR
+There was an error parsing the file.
+
+.SH NOTES
+Parsing of the symbol stream is delayed until the first call to a symbol
+related API.
+.PP
+libpdb performs validation of the symbol stream during parsing, but validation
+of internal symbol data is left to the caller.
+.PP
+.BR pdb_lookup_public_symbol (3)
+is the recommended way to query symbols from a PDB file if the symbol name is
+known in advance.
+This is primarily for performance reasons, as
+.BR pdb_lookup_public_symbol (3)
+uses a hash table embedded in the PDB file to find symbols.
+
+.SH EXAMPLE
+The following function iterates through all public symbols and prints all symbol
+names.
+.PP
+.nf
+#include <pdb.h>
+#include <stdio.h>
+#include <stdlib.h>
+.PP
+void print_symbols(void *pdb_context)
+{
+    uint32_t nr_symbols = 0;
+    if (pdb_get_nr_public_symbols(pdb_context, &nr_symbols) < 0) {
+        fprintf(stderr, "Error parsing symbol stream: %d\\n", pdb_errno(pdb_context));
+        exit(EXIT_FAILURE);
+    }
+
+    const PUBSYM32 **symbols = calloc(nr_symbols, sizeof(PUBSYM32 *));
+    if (symbols == NULL) {
+        fprintf(stderr, "Error allocating symbol array\\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pdb_get_public_symbols(pdb_context, symbols) < 0) {
+        fprintf("stderr, "Error getting public symbols: %d\\n", pdb_errno(pdb_context));
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < nr_symbols; i++) {
+        uint32_t sym_rva = 0;
+        (void) pdb_convert_section_offset_to_rva(pdb_context, sym->seg, sym->off, &sym_rva);
+        printf("0x%08x: %s\\n", sym_rva, symbols[i]->name);
+    }
+
+    free(symbols);
+}
+.fi
+
+.SH SEE ALSO
+.BR pdb_load (3),
+.BR pdb_lookup_public_symbol (3),
+.BR pdb_convert_section_offset_to_rva (3),
+.BR pdb_errno (3)

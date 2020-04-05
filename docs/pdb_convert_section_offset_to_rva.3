@@ -1,0 +1,68 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_CONVERT_SECTION_OFFSET_TO_RVA 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_convert_section_offset_to_rva \- convert a section index/offset pair to an RVA
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "int pdb_convert_section_offset_to_rva(void *" context ,
+.BI "                                      uint16_t " section_idx ,
+.BI "                                      uint32_t " section_offset ,
+.BI "                                      uint32_t *" rva );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_convert_section_offset_to_rva ()
+converts the
+.RI ( section_idx ,
+.IR section_offset )
+pair into a Relative Virtual Address (RVA) and returns it in
+.IR rva .
+This function can be used to get an RVA for symbols returned by
+.BR pdb_get_public_symbols (3)
+and
+.BR pdb_lookup_public_symbol (3).
+
+.SH RETURN VALUE
+.BR pdb_convert_section_offset_to_rva ()
+returns 0 on success, or -1 on error.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required output parameter was NULL.
+.TP
+.B EPDB_INVALID_SECTION_IDX
+An invalid section index was specified. See NOTES.
+.TP
+.B EPDB_INVALID_SECTION_OFFSET
+An invalid section offset was specified.
+This may happen if the offset is larger than the section size.
+
+.SH NOTES
+Note that section indices for symbols are biased by 1 to differentiate between
+symbols that are not associated with a section and symbols that are in the
+first section.
+A section index of 0 indicates a symbol is not associated with a section.
+
+Furthermore, symbols that have a section index that is equal to the number of
+sections plus one belong to a special segment that has a dynamic base.
+These special symbols indicate dynamic relocations, and are commonly used to
+describe symbols affected by Kernel Address Space Randomization (KASLR) on
+recent Windows kernel releases.
+
+.SH SEE ALSO
+.BR pdb_get_symbols (3),
+.BR pdb_get_public_symbols (3),
+.BR pdb_lookup_public_symbol (3),
+.BR pdb_errno (3)

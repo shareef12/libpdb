@@ -1,0 +1,31 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_SIG_MATCH 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_sig_match \- verify a PDB file's signature
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "bool pdb_sig_match(void *" data ", size_t " length );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_sig_match ()
+verifies the signature of the PDB file specified by
+.IR data .
+Up to
+.I length
+bytes of the signature will be checked. The accuracy of this function increases
+with the specified
+.IR length .
+
+.SH RETURN VALUE
+.BR pdb_sig_match ()
+returns true if a PDB file signature is matched.
+
+.SH SEE ALSO
+.BR pdb_create_context (3),
+.BR pdb_load (3)

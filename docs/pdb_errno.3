@@ -1,0 +1,25 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_ERRNO 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_errno \- get last libpdb error
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "pdb_errno_t pdb_errno(void *" context );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_errno ()
+retrieves the last libpdb error to occur from
+.IR context .
+
+.SH RETURN VALUE
+.BR pdb_errno ()
+returns the last error.
+
+.SH SEE ALSO
+.BR pdb_strerror (3)

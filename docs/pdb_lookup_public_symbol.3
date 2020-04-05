@@ -1,0 +1,76 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_LOOKUP_PUBLIC_SYMBOL 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_lookup_public_symbol \- find a public symbol by hash
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "const PUBSYM32 *pdb_lookup_public_symbol(void *" context ", const char *" name ,
+.BI "                                         bool " case_sensitive );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_lookup_public_symbol ()
+finds the public symbol with the mangled name
+.IR name .
+Specify
+.I case_sensitive
+to perform a case-sensitive search.
+.PP
+.BR pdb_lookup_public_symbol ()
+is the recommended way to query symbols from a PDB file if the symbol name is
+known in advance.
+This is primarily for performance reasons, as
+.BR pdb_lookup_public_symbol ()
+uses a hash table embedded in the PDB file to find symbols.
+This function uses a case-insensitive hashing algorithm, so there is no
+performance impact for case-insensitive queries.
+.PP
+See
+.BR pdb_get_symbols (3)
+for a description of the PUBSYM32 structure.
+
+.SH RETURN VALUE
+.BR pdb_lookup_public_symbol ()
+returns the found symbol, or NULL on error.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_ALLOCATION_FAILURE
+There was an internal error allocating memory.
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required parameter was NULL.
+.TP
+.B EPDB_UNSUPPORTED_VERSION
+The parser encountered an unsupported version in the PDB file.
+.TP
+.B EPDB_PARSE_ERROR
+There was an error parsing the file.
+.TP
+.B EPDB_NOT_FOUND
+The specified symbol was not found.
+
+.SH NOTES
+Parsing of the symbol stream is delayed until the first call to a symbol
+related API.
+.PP
+libpdb performs validation of the symbol stream during parsing, but validation
+of internal symbol data is left to the caller.
+
+.SH SEE ALSO
+.BR pdb_load (3),
+.BR pdb_get_symbols (3),
+.BR pdb_get_public_symbols (3),
+.BR pdb_convert_section_offset_to_rva (3),
+.BR pdb_errno (3)
