@@ -184,6 +184,7 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
         return false;
     }
 
+    /* clang-format off */
     bool valid =
         memcmp(sb->file_magic, PDB_SIGNATURE, PDB_SIGNATURE_SZ) == 0 &&
         sb->num_blocks > 0 &&
@@ -191,6 +192,7 @@ static bool valid_superblock(const struct superblock *sb, size_t len)
         sb->free_block_map_block < sb->num_blocks &&
         sb->num_directory_bytes > 0 &&
         sb->block_map_addr < sb->num_blocks;
+    /* clang-format on */
 
     switch (sb->block_size) {
         case 512:
@@ -652,7 +654,10 @@ static int parse_pubsym_hashtable(
                     chain_end_off = nr_hashrecs * sizeof(struct gsi_hashrec_offset_calc);
                 }
                 else {
-                    /* This is an intermediate bucket - its chain lasts until the next full bucket's chain start */
+                    /*
+                     * This is an intermediate bucket - its chain lasts until the next full bucket's
+                     * chain start
+                     */
                     chain_end_off = buckets[buckets_idx + 1];
                 }
 
@@ -670,11 +675,17 @@ static int parse_pubsym_hashtable(
                 chain_start_off = chain_start_off / sizeof(struct gsi_hashrec_offset_calc) * sizeof(struct gsi_hashrec);
                 chain_end_off = chain_end_off / sizeof(struct gsi_hashrec_offset_calc) * sizeof(struct gsi_hashrec);
 
-                /* Validate the offsets for the bucket's chain */
-                if (hdr->cb_hr < chain_end_off ||                           /* chain must be in the stream */
-                    chain_end_off <= chain_start_off ||                     /* start < end */
-                    chain_start_off % sizeof(struct gsi_hashrec) != 0 ||    /* start must be on a hashrec boundary */
-                    (chain_end_off - chain_start_off) % sizeof(struct gsi_hashrec) != 0) {  /* start and end are properly aligned */
+                /*
+                 * Validate the offsets for the bucket's chain. Verify that:
+                 *  1. all hashrecs are contained in the stream
+                 *  2. start < end
+                 *  3. start is on a hashrec boundary
+                 *  4. start and end are properly aligned
+                 */
+                if (hdr->cb_hr < chain_end_off ||
+                    chain_end_off <= chain_start_off ||
+                    chain_start_off % sizeof(struct gsi_hashrec) != 0 ||
+                    (chain_end_off - chain_start_off) % sizeof(struct gsi_hashrec) != 0) {
                     /* Malformed pdb - invalid chain indicies */
                     goto err_pdb_corrupt;
                 }
@@ -874,6 +885,7 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     uint32_t *pdwords_end = pdwords + nr_dwords;
     size_t count = nr_dwords & 7;
 
+    /* clang-format off */
     switch (count) {
         do {
             count = 8;
@@ -888,6 +900,7 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     case 0: ;
         } while ((pdwords += count) < pdwords_end);
     }
+    /* clang-format on */
 
     data = (unsigned char *)pdwords;
 
@@ -982,7 +995,7 @@ int pdb_load(void *context, const void *pdbdata, size_t length)
         return -1;
     }
 
-    if (parse_dbi_stream(ctx) < 0) {;
+    if (parse_dbi_stream(ctx) < 0) {
         return -1;
     }
 
@@ -999,6 +1012,7 @@ void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, co
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
+    /* clang-format off */
     if (ctx == NULL || !ctx->pdb_loaded ||
         block_size == NULL ||
         nr_blocks == NULL ||
@@ -1007,6 +1021,7 @@ void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, co
         nr_streams == NULL) {
         return;
     }
+    /* clang-format on */
 
     *block_size = ctx->block_size;
     *nr_blocks = ctx->nr_blocks;

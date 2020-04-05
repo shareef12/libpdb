@@ -243,6 +243,7 @@ int main(int argc, char **argv)
     bool show_sections = 0;
     bool show_syms = 0;
 
+    /* clang-format off */
     static struct option long_options[] = {
         {"file-header",     no_argument, 0, 'f'},
         {"section-headers", no_argument, 0, 'S'},
@@ -252,6 +253,7 @@ int main(int argc, char **argv)
         {"help",            no_argument, 0, 'h'},
         {"version",         no_argument, 0, 'v'},
     };
+    /* clang-format on */
 
     while (true) {
         int option_index = 0;
