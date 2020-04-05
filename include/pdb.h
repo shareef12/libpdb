@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#pragma pack(push,1)
+#pragma pack(push, 1)
 
 #define PDB_EXPORT __attribute__((visibility("default")))
 
@@ -51,30 +51,35 @@ struct image_section_header {
     uint32_t characteristics;
 };
 
-typedef void * (*malloc_fn)(size_t size);
+typedef void *(*malloc_fn)(size_t size);
 typedef void (*free_fn)(void *ptr);
-
 
 PDB_EXPORT bool pdb_sig_match(void *data, size_t len);
 
-PDB_EXPORT void * pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn);
+PDB_EXPORT void *pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn);
 PDB_EXPORT void pdb_reset_context(void *context);
 PDB_EXPORT void pdb_destroy_context(void *context);
 
 PDB_EXPORT int pdb_load(void *context, const void *pdbdata, size_t length);
 
-
-PDB_EXPORT void pdb_get_header(void *context, uint32_t *block_size, uint32_t *nr_blocks, const struct guid **guid, uint32_t *age, uint32_t *nr_streams);
+PDB_EXPORT void pdb_get_header(
+    void *context,
+    uint32_t *block_size,
+    uint32_t *nr_blocks,
+    const struct guid **guid,
+    uint32_t *age,
+    uint32_t *nr_streams);
 PDB_EXPORT uint32_t pdb_get_block_size(void *context);
 PDB_EXPORT uint32_t pdb_get_nr_blocks(void *context);
-PDB_EXPORT const struct guid * pdb_get_guid(void *context);
+PDB_EXPORT const struct guid *pdb_get_guid(void *context);
 PDB_EXPORT uint32_t pdb_get_age(void *context);
 
 PDB_EXPORT uint32_t pdb_get_nr_streams(void *context);
-PDB_EXPORT const unsigned char * pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size);
+PDB_EXPORT const unsigned char *pdb_get_stream(
+    void *context, uint32_t stream_idx, uint32_t *stream_size);
 
 PDB_EXPORT uint32_t pdb_get_nr_sections(void *context);
-PDB_EXPORT const struct image_section_header * pdb_get_sections(void *context);
+PDB_EXPORT const struct image_section_header *pdb_get_sections(void *context);
 
 /* Iterate only through public symbols */
 PDB_EXPORT int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols);
@@ -85,13 +90,15 @@ PDB_EXPORT int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
 PDB_EXPORT int pdb_get_symbols(void *context, const struct SYMTYPE **symbols);
 
 /* Find a symbol by looking it up in the PDB symbol hashtable */
-PDB_EXPORT const PUBSYM32 * pdb_lookup_public_symbol(void *context, const char *name, bool case_sensitive);
+PDB_EXPORT const PUBSYM32 *pdb_lookup_public_symbol(
+    void *context, const char *name, bool case_sensitive);
 
-PDB_EXPORT int pdb_convert_section_offset_to_rva(void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
+PDB_EXPORT int pdb_convert_section_offset_to_rva(
+    void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
 
 PDB_EXPORT pdb_errno_t pdb_errno(void *context);
-PDB_EXPORT const char * pdb_strerror(void *context);
+PDB_EXPORT const char *pdb_strerror(void *context);
 
 #pragma pack(pop)
 
-#endif // PDB_H
+#endif  // PDB_H

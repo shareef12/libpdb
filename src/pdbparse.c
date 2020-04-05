@@ -19,17 +19,15 @@
 /* 32 hex characters + 4 hyphens + enclosing braces */
 #define GUID_STR_SIZE (32 + 4 + 2)
 
-
 int snprintf_guid(char *str, size_t size, const struct guid *guid)
 {
-    return snprintf(str, size, "{%08x-%04hx-%04hx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx}",
-        guid->data1, guid->data2, guid->data3,
-        guid->data4[0], guid->data4[1], guid->data4[2], guid->data4[3],
-        guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
+    return snprintf(
+        str, size, "{%08x-%04hx-%04hx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx}",
+        guid->data1, guid->data2, guid->data3, guid->data4[0], guid->data4[1], guid->data4[2],
+        guid->data4[3], guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
 }
 
-
-void * open_pdb_file(const char *pathname)
+void *open_pdb_file(const char *pathname)
 {
     int fd = open(pathname, O_RDONLY);
     if (fd < 0) {
@@ -80,12 +78,10 @@ err_munmap_pdbdata:
     return 0;
 }
 
-
 void close_pdb_file(void *pdb_context)
 {
     pdb_destroy_context(pdb_context);
 }
-
 
 void print_header(void *pdb)
 {
@@ -107,7 +103,6 @@ void print_header(void *pdb)
     printf("  %-17s: %u\n", "Number of streams", nr_streams);
 }
 
-
 void print_sections(void *pdb)
 {
     uint32_t nr_sections = pdb_get_nr_sections(pdb);
@@ -119,14 +114,10 @@ void print_sections(void *pdb)
 
     for (uint32_t i = 0; i < nr_sections; i++) {
         const struct image_section_header *s = &sections[i];
-        printf("  [%2u] %-8.*s  0x%06x 0x%016x 0x%06x 0x%06x 0x%08x\n",
-            i,
-            IMAGE_SIZEOF_SHORT_NAME, s->name,
-            s->pointer_to_raw_data,
-            s->virtual_address,
-            s->size_of_raw_data,
-            s->misc.virtual_size,
-            s->characteristics);
+        printf(
+            "  [%2u] %-8.*s  0x%06x 0x%016x 0x%06x 0x%06x 0x%08x\n", i, IMAGE_SIZEOF_SHORT_NAME,
+            s->name, s->pointer_to_raw_data, s->virtual_address, s->size_of_raw_data,
+            s->misc.virtual_size, s->characteristics);
     }
 
     puts("");
@@ -142,7 +133,6 @@ void print_sections(void *pdb)
     puts("  IMAGE_SCN_MEM_READ                  0x40000000");
     puts("  IMAGE_SCN_MEM_WRITE                 0x80000000");
 }
-
 
 void print_public_symbols(void *pdb)
 {
@@ -176,13 +166,25 @@ void print_public_symbols(void *pdb)
         /* TODO: Can a symbol have multiple flags set? */
         const char *sym_type;
         switch (sym->pubsymflags.grfFlags) {
-        case cvpsfNone: sym_type = "NOTYPE"; break;
-        case cvpsfCode: sym_type = "CODE"; break;
-        case cvpsfFunction: sym_type = "FUNC"; break;
-        case cvpsfManaged: sym_type = "MANAGE"; break;
-        case cvpsfMSIL: sym_type = "MSIL"; break;
+        case cvpsfNone:
+            sym_type = "NOTYPE";
+            break;
+        case cvpsfCode:
+            sym_type = "CODE";
+            break;
+        case cvpsfFunction:
+            sym_type = "FUNC";
+            break;
+        case cvpsfManaged:
+            sym_type = "MANAGE";
+            break;
+        case cvpsfMSIL:
+            sym_type = "MSIL";
+            break;
         default:
-            fprintf(stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->name, sym->pubsymflags.grfFlags);
+            fprintf(
+                stderr, "WARNING: Symbol %s has multiple flags values: 0x%x\n", sym->name,
+                sym->pubsymflags.grfFlags);
             sym_type = "UNK";
             break;
         }
@@ -203,7 +205,9 @@ void print_public_symbols(void *pdb)
         }
         else {
             if (pdb_convert_section_offset_to_rva(pdb, sym->seg, sym->off, &sym_rva) < 0) {
-                fprintf(stderr, "WARNING: No RVA translation for symbol: %s (idx=0x%x offset=0x%x): %s\n",
+                fprintf(
+                    stderr,
+                    "WARNING: No RVA translation for symbol: %s (idx=0x%x offset=0x%x): %s\n",
                     sym->name, sym->seg, sym->off, pdb_strerror(pdb));
             }
         }
@@ -214,13 +218,11 @@ void print_public_symbols(void *pdb)
     free(symbols);
 }
 
-
 void print_version(void)
 {
     puts(PROGRAM_NAME " " PROGRAM_VERSION);
     puts(PROGRAM_LICENSE);
 }
-
 
 void print_usage(FILE *stream)
 {
@@ -235,7 +237,6 @@ void print_usage(FILE *stream)
     fputs("  -h --help              Display this information\n", stream);
     fputs("  -v --version           Display the version number of " PROGRAM_NAME "\n", stream);
 }
-
 
 int main(int argc, char **argv)
 {

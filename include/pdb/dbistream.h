@@ -90,4 +90,4 @@ struct debug_header {
     };
 } __attribute__((packed));
 
-#endif // PDB_DBISTREAM_H
+#endif  // PDB_DBISTREAM_H

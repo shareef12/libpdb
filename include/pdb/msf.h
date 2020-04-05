@@ -27,4 +27,4 @@ struct stream_directory {
     // uint32_t stream_blocks[num_streams][];
 } __attribute__((packed));
 
-#endif // PDB_MSF_H
+#endif  // PDB_MSF_H
