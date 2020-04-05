@@ -963,18 +963,18 @@ void pdb_destroy_context(void *context)
 }
 
 
-int pdb_load(void *context, const void *pdbdata, size_t len)
+int pdb_load(void *context, const void *pdbdata, size_t length)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
     PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
-    PDB_ASSERT_PARAMETER(ctx, -1, pdbdata != NULL && len > 0);
+    PDB_ASSERT_PARAMETER(ctx, -1, pdbdata != NULL && length > 0);
 
     if (ctx->pdb_loaded) {
         pdb_reset_context(context);
     }
 
-    if (extract_streams(ctx, pdbdata, len) < 0) {
+    if (extract_streams(ctx, pdbdata, length) < 0) {
         return -1;
     }
 
