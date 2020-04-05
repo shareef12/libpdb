@@ -1,4 +1,4 @@
-#ifndef PDB_CONFIG_H
+#ifndef PDB_CONFIG_H /* NOLINT(llvm-header-guard) */
 #define PDB_CONFIG_H
 
 #define PROJECT_NAME "@PROJECT_NAME@"

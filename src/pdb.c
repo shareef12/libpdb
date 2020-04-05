@@ -26,15 +26,17 @@
 
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
-#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*array))
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*(array)))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 /*
  * Declare these inline functions from cvinfo.h as extern, otherwise they will
  * not be included in our static library and link errors will result.
  */
-extern __INLINE SYMTYPE *NextSym(const SYMTYPE *sym);
-extern __INLINE char *NextType(const char *type);
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
+extern __INLINE SYMTYPE *NextSym(const SYMTYPE *pSym);
+/* NOLINTNEXTLINE(readability-redundant-declaration) */
+extern __INLINE char *NextType(const char *pType);
 
 /*
  * libpdb uses assertions to catch usage errors when configured with
@@ -491,7 +493,7 @@ static int parse_dbi_stream(struct pdb_context *ctx)
     return 0;
 }
 
-static size_t nr_bits_set(unsigned char *bitvector, size_t bitvector_size)
+static size_t nr_bits_set(const unsigned char *bitvector, size_t bitvector_size)
 {
     /*
      * Compute a static memoized table - this is still thread-safe because the
@@ -499,17 +501,17 @@ static size_t nr_bits_set(unsigned char *bitvector, size_t bitvector_size)
      * table will not cause issues.
      */
     static bool table_computed = false;
-    static unsigned char table[256] = {0};
+    static uint8_t table[256] = {0};
 
     if (!table_computed) {
-        for (int i = 0; i < 256; i++) {
-            unsigned char val = 0;
-            int c = i;
+        for (uint8_t i = 0; i < UINT8_MAX; i++) {
+            uint8_t val = 0;
+            uint8_t c = i;
             for (int j = 0; j < 8 && c != 0; j++) {
-                if (c & 1) {
+                if (c & 1u) {
                     val++;
                 }
-                c >>= 1;
+                c >>= 1u;
             }
             table[i] = val;
         }
@@ -616,9 +618,9 @@ static int parse_pubsym_hashtable(struct pdb_context *ctx, const struct gsi_hash
     size_t buckets_idx = 0;
 
     for (size_t i = 0; i < pbitvec_sz; i++) {
-        char c = pbitvec[i];
+        unsigned char c = pbitvec[i];
         for (int j = 0; j < 8 && c != 0; j++) {
-            if (c & 1) {
+            if (c & 1u) {
                 /* The bucket has a chain */
 
                 if (buckets_idx >= nr_full_buckets) {
@@ -690,7 +692,7 @@ static int parse_pubsym_hashtable(struct pdb_context *ctx, const struct gsi_hash
                 ctx->pubsym_hashtab.buckets[i * 8 + j] = NULL;
             }
 
-            c >>= 1;
+            c >>= 1u;
         }
     }
 
@@ -859,12 +861,13 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     uint32_t hash = 0;
 
     /* Hash leading dwords using Duff's Device */
-    size_t nr_dwords = length >> 2;
+    size_t nr_dwords = length >> 2u;
     uint32_t *pdwords = (uint32_t *)data;
     uint32_t *pdwords_end = pdwords + nr_dwords;
-    size_t count = nr_dwords & 7;
+    size_t count = nr_dwords & 7u;
 
     /* clang-format off */
+    /* NOLINTNEXTLINE(hicpp-multiway-paths-covered) */
     switch (count) {
         do {
             count = 8;
@@ -884,23 +887,23 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     data = (unsigned char *)pdwords;
 
     /* Hash possible odd word */
-    if (length & 2) {
+    if (length & 2u) {
         hash ^= *(uint16_t *)data;
         data += sizeof(uint16_t);
     }
 
     /* Hash possible odd byte */
-    if (length & 1) {
+    if (length & 1u) {
         hash ^= *data;
         data++;
     }
 
     const uint32_t to_lower_mask = 0x20202020;
     hash |= to_lower_mask;
-    hash ^= (hash >> 11);
+    hash ^= (hash >> 11u);
 
-    hash = (hash ^ (hash >> 16)) % modulus;
-    return (uint16_t)(hash & 0xffff);
+    hash = (hash ^ (hash >> 16u)) % modulus;
+    return (uint16_t)(hash & 0xffffu);
 }
 
 bool pdb_sig_match(void *data, size_t len)

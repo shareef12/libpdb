@@ -43,13 +43,13 @@ struct dbi_stream_header {
 } __attribute__((packed));
 
 enum section_map_entry_flags {
-    SMEF_READ = 1 << 0,
-    SMEF_WRITE = 1 << 1,
-    SMEF_EXECUTE = 1 << 2,
-    SMEF_ADDRESS_IS_32BIT = 1 << 3,
-    SMEF_IS_SELECTOR = 1 << 8,
-    SMEF_IS_ABSOLUTE_ADDRESS = 1 << 9,
-    SMEF_IS_GROUP = 1 << 10,
+    SMEF_READ = 1,
+    SMEF_WRITE = 2,
+    SMEF_EXECUTE = 4,
+    SMEF_ADDRESS_IS_32BIT = 8,
+    SMEF_IS_SELECTOR = 0x100,
+    SMEF_IS_ABSOLUTE_ADDRESS = 0x200,
+    SMEF_IS_GROUP = 0x400,
 };
 
 struct section_map_entry {

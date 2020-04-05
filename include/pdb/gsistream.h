@@ -1,3 +1,6 @@
+#ifndef PDB_GSISTREAM_H
+#define PDB_GSISTREAM_H
+
 #include <stdint.h>
 
 /* gsi_hash_header header versions */
@@ -34,3 +37,5 @@ struct gsi_hashrec_offset_calc {
     int32_t psym;
     int32_t c_ref;
 };
+
+#endif  // PDB_GSISTREAM_H

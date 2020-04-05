@@ -29,7 +29,7 @@ int snprintf_guid(char *str, size_t size, const struct guid *guid)
 
 void *open_pdb_file(const char *pathname)
 {
-    int fd = open(pathname, O_RDONLY);
+    int fd = open(pathname, O_RDONLY | O_CLOEXEC); /* NOLINT(hicpp-signed-bitwise) */
     if (fd < 0) {
         fprintf(stderr, "Error opening pdb file: %s (%u)\n", strerror(errno), errno);
         return NULL;
