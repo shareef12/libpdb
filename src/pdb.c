@@ -994,16 +994,12 @@ void pdb_get_header(
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
-    /* clang-format off */
-    if (ctx == NULL || !ctx->pdb_loaded ||
-        block_size == NULL ||
-        nr_blocks == NULL ||
-        guid == NULL ||
-        age == NULL ||
-        nr_streams == NULL) {
-        return;
-    }
-    /* clang-format on */
+    PDB_ASSERT_CTX_NOT_NULL(ctx, /* no-retval */);
+    PDB_ASSERT_PDB_LOADED(ctx, /* no-retval */);
+    PDB_ASSERT_PARAMETER(
+        ctx, /* no-retval */,
+        block_size != NULL && nr_blocks != NULL && guid != NULL && age != NULL &&
+            nr_streams != NULL);
 
     *block_size = ctx->block_size;
     *nr_blocks = ctx->nr_blocks;
