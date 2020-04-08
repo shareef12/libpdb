@@ -1,0 +1,76 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_GET_SECTIONS 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_get_sections, pdb_get_nr_sections \- get an image's section headers
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "const struct image_section_header *pdb_get_sections(void *" context );
+.PP
+.BI "uint32_t pdb_get_nr_sections(void *" context );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_get_sections ()
+retrieves the sections for the PDB file referenced by
+.I context
+as an array of image_section_header structures.
+.PP
+.BR pdb_get_nr_sections ()
+returns the number sections present in the PDB file referenced by
+.IR context .
+.SS The image_section_header structure
+The image_section_header structures returned by
+.BR pdb_get_sections ()
+are identical to the Microsoft IMAGE_SECTION_HEADER structure.
+.PP
+.nf
+#define IMAGE_SIZEOF_SHORT_NAME 8
+.PP
+struct image_section_header {
+    char name[IMAGE_SIZEOF_SHORT_NAME];
+    union {
+        uint32_t physical_address;
+        uint32_t virtual_size;
+    } misc;
+    uint32_t virtual_address;
+    uint32_t size_of_raw_data;
+    uint32_t pointer_to_raw_data;
+    uint32_t pointer_to_relocations;
+    uint32_t pointer_to_line_numbers;
+    uint16_t number_of_relocations;
+    uint16_t number_of_line_numbers;
+    uint32_t characteristics;
+};
+.fi
+
+.SH RETURN VALUE
+.BR pdb_get_sections ()
+returns the section headers, or NULL on error.
+.BR pdb_get_nr_sections ()
+returns the number of sections, or 0 on error.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required output parameter was NULL.
+
+.SH NOTES
+Callers should use
+.BR pdb_get_nr_sections ()
+to determine the size of the array returned by
+.BR pdb_get_sections ().
+
+.SH SEE ALSO
+.BR pdb_load (3),
+.BR pdb_errno (3)

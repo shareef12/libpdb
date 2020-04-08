@@ -1,0 +1,25 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_STRERROR 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_strerror \- return string description of a libpdb error
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "const char *pdb_strerror(void *" context );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_strerror ()
+returns a string description the last libpdb error from
+.IR context .
+
+.SH RETURN VALUE
+.BR pdb_strerror ()
+returns a string description of the last libpdb error.
+
+.SH SEE ALSO
+.BR pdb_errno (3)

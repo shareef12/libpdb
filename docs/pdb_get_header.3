@@ -1,0 +1,56 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_GET_HEADER 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_get_header, pdb_get_block_size, pdb_get_nr_blocks, pdb_get_guid, pdb_get_age \- get PDB header information
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "void pdb_get_header(void *" context ", uint32_t *" block_size ,
+.BI "                    uint32_t *" nr_blocks ", const struct guid **" guid ,
+.BI "                    uint32_t *" age ", uint32_t *" nr_streams );
+.PP
+.BI "uint32_t pdb_get_block_size(void *" context );
+.BI "uint32_t pdb_get_nr_blocks(void *" context );
+.BI "const struct guid *pdb_get_guid(void *" context );
+.BI "uint32_t pdb_get_age(void *" context );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_get_header ()
+gets information from the PDB stream header of the pdb referenced by
+.IR context .
+.PP
+.BR pdb_get_block_size (),
+.BR pdb_get_nr_blocks (),
+.BR pdb_get_guid (),
+and
+.BR pdb_get_age ()
+can be used to query individual fields if the entire header is not needed.
+
+.SH RETURN VALUE
+.BR pdb_get_block_size (),
+.BR pdb_get_nr_blocks (),
+and
+.BR pdb_get_age ()
+return the requested data, or 0 if an error occurred.
+.BR pdb_get_guid ()
+returns NULL on error.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required output parameter was NULL.
+
+.SH SEE ALSO
+.BR pdb_load (3),
+.BR pdb_errno (3)

@@ -1,0 +1,51 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_GET_STREAM 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_get_stream, pdb_get_nr_streams \- get a raw PDB stream
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "const unsigned char *pdb_get_stream(void *" context ,
+.BI "                                    uint32_t " stream_idx ,
+.BI "                                    uint32_t *" stream_size );
+.PP
+.BI "uint32_t pdb_get_nr_streams(void *" context );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_get_stream ()
+retrieves raw data for the stream at index
+.I stream_idx
+in the PDB file specified by
+.IR context .
+The size of the stream is returned in
+.IR stream_size .
+.PP
+.BR pdb_get_nr_streams ()
+returns the number of streams present in the PDB file specified by
+.IR context .
+
+.SH RETURN VALUE
+.BR pdb_get_stream ()
+returns the stream data, or NULL on error.
+.BR pdb_get_nr_streams ()
+returns the number of streams, or 0 on error.
+Detailed error information can be retrieved with
+.BR pdb_errno (3).
+
+.SH ERRORS
+.TP
+.B EPDB_NO_PDB_LOADED
+No PDB file has been loaded into
+.IR context .
+.TP
+.B EPDB_INVALID_PARAMETER
+A required output parameter was NULL.
+
+.SH SEE ALSO
+.BR pdb_load (3),
+.BR pdb_errno (3)

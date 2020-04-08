@@ -1,0 +1,57 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_CREATE_CONTEXT 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_create_context, pdb_destroy_context, pdb_reset_context \- initialize and destroy a libpdb parser
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.B typedef void *(*malloc_fn)(size_t size);
+.B typedef void (*free_fn)(void *ptr);
+.PP
+.BI "void *pdb_create_context(malloc_fn " user_malloc_fn ", free_fn " user_free_fn );
+.BI "void pdb_destroy_context(void *" context );
+.PP
+.BI "void pdb_reset_context(void *" context );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_create_context ()
+allocates and initializes a context suitable for parsing PDB files.
+.I user_malloc_fn
+and
+.I user_free_fn
+can optionally be specified to use an alternate allocator.
+Specify NULL To use the default
+.BR malloc (3)
+and
+.BR free (3)
+functions.
+Contexts should be freed with
+.BR pdb_destroy_context ()
+to ensure all internal resources are properly released.
+
+.BR pdb_reset_context ()
+will reset a PDB context back to its initial state, and release any internal
+resources acquired during PDB parsing.
+
+.SH RETURN VALUE
+.BR pdb_create_context ()
+returns the created context, or NULL if there was an allocation error.
+
+.SH NOTES
+The context created by
+.BR pdb_create_context ()
+maintains internal state for a single PDB file.
+To parse multiple PDB files, or interact with a single PDB safely from multiple
+threads, create a new context per task.
+A PDB file must be loaded into the context with
+.BR pdb_load (3)
+before calling other libpdb functions.
+
+.SH SEE ALSO
+.BR pdb_sig_match (3),
+.BR pdb_load (3)

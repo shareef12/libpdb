@@ -220,7 +220,7 @@ static int extract_stream_directory(
     size_t nr_sd_blocks = nr_blocks(sb->num_directory_bytes, sb->block_size);
     if (sb->block_map_addr * sb->block_size + nr_sd_blocks > len) {
         /* Malformed pdb - block_map extends past end of file */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -236,7 +236,7 @@ static int extract_stream_directory(
     for (size_t i = 0; i < nr_sd_blocks; i++) {
         if (block_map[i] >= sb->num_blocks) {
             /* Malformed pdb - invalid block index */
-            ctx->error = EPDB_FILE_CORRUPT;
+            ctx->error = EPDB_PARSE_ERROR;
             goto err_free_sd;
         }
 
@@ -247,7 +247,7 @@ static int extract_stream_directory(
     uint32_t num_streams = *(uint32_t *)sd;
     if (sizeof(uint32_t) + num_streams * sizeof(uint32_t) > sb->num_directory_bytes) {
         /* Malformed pdb - too many streams */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         goto err_free_sd;
     }
 
@@ -261,7 +261,7 @@ static int extract_stream_directory(
         sizeof(uint32_t) + num_streams * sizeof(uint32_t) + total_blocks * sizeof(uint32_t);
     if (computed_sdir_size != sb->num_directory_bytes) {
         /* Malformed pdb - incorrect stream directory size */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         goto err_free_sd;
     }
 
@@ -307,7 +307,7 @@ static int do_extract_streams(
             uint32_t block_idx = *stream_blocks;
             if (block_idx >= sb->num_blocks) {
                 /* Malformed pdb - invalid block index */
-                ctx->error = EPDB_FILE_CORRUPT;
+                ctx->error = EPDB_PARSE_ERROR;
                 goto err_free_strms;
             }
 
@@ -333,7 +333,7 @@ static int extract_streams(struct pdb_context *ctx, const unsigned char *pdbdata
     const struct superblock *sb = (struct superblock *)pdbdata;
     bool valid = valid_superblock(sb, len);
     if (!valid) {
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -355,7 +355,7 @@ static int extract_streams(struct pdb_context *ctx, const unsigned char *pdbdata
     if (nr_strms < MIN_STREAM_COUNT) {
         /* Malformed PDB - a PDB has a minimum of 5 static streams */
         free((void *)strms);
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -371,14 +371,14 @@ static int parse_pdb_stream(struct pdb_context *ctx)
 {
     if (PDB_STREAM_IDX >= ctx->nr_streams) {
         /* Malformed PDB - No PDB stream */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
     const struct stream *stream = &ctx->streams[PDB_STREAM_IDX];
     if (stream->size < sizeof(struct pdb_stream_header)) {
         /* Malformed PDB - PDB stream too small */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -401,14 +401,14 @@ static int parse_dbi_stream(struct pdb_context *ctx)
 {
     if (DBI_STREAM_IDX >= ctx->nr_streams) {
         /* Malformed PDB - No DBI stream */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
     const struct stream *stream = &ctx->streams[DBI_STREAM_IDX];
     if (stream->size < sizeof(struct dbi_stream_header)) {
         /* Malformed PDB - DBI stream too small */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -423,7 +423,7 @@ static int parse_dbi_stream(struct pdb_context *ctx)
         hdr->public_stream_index >= ctx->nr_streams || hdr->sym_record_stream >= ctx->nr_streams ||
         hdr->mfc_type_server_index >= ctx->nr_streams) {
         /* Malformed PDB - bad stream index */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -432,7 +432,7 @@ static int parse_dbi_stream(struct pdb_context *ctx)
         hdr->type_server_map_size + hdr->optional_dbg_header_size + hdr->ec_substream_size;
     if (total_sz != stream->size) {
         /* Malformed PDB - bad stream size */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -447,7 +447,7 @@ static int parse_dbi_stream(struct pdb_context *ctx)
     if (sizeof(struct section_map_header) + sizeof(struct section_map_entry) * smhdr->count >
         hdr->section_map_size) {
         /* Malformed PDB - bad substream size */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -464,21 +464,21 @@ static int parse_dbi_stream(struct pdb_context *ctx)
         (const struct debug_header *)((char *)echdr + hdr->ec_substream_size);
     if (sizeof(struct debug_header) > hdr->optional_dbg_header_size) {
         /* Malformed PDB - invalid substream size */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
     for (uint16_t i = 0; i < DBI_NUM_DEBUG_HEADER_STREAMS; i++) {
         if (dbghdr->streams[i] != UINT16_MAX && dbghdr->streams[i] >= ctx->nr_streams) {
             /* Malformed PDB - invalid stream index */
-            ctx->error = EPDB_FILE_CORRUPT;
+            ctx->error = EPDB_PARSE_ERROR;
             return -1;
         }
     }
 
     if (dbghdr->section_header_data_stream_index == UINT16_MAX) {
         /* Malformed PDB - No section header stream */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -534,7 +534,7 @@ static int parse_pubsym_hashtable(struct pdb_context *ctx, const struct gsi_hash
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
     if (symbols_stream_idx >= ctx->nr_streams) {
         /* Invalid stream index */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
     const struct stream *symrec_stream = &ctx->streams[symbols_stream_idx];
@@ -707,7 +707,7 @@ err_pdb_corrupt:
         ctx->free(hashrecs);
     }
 
-    ctx->error = EPDB_FILE_CORRUPT;
+    ctx->error = EPDB_PARSE_ERROR;
     return -1;
 }
 
@@ -715,20 +715,20 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
 {
     uint16_t public_symbols_idx = ctx->dbi_header->public_stream_index;
     if (public_symbols_idx >= ctx->nr_streams) {
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
     const struct stream *stream = &ctx->streams[public_symbols_idx];
     if (stream->size < sizeof(struct gsi_stream_header)) {
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
     const struct gsi_stream_header *hdr = (const struct gsi_stream_header *)stream->data;
     if (sizeof(struct gsi_stream_header) + hdr->sym_hash_size > stream->size ||
         hdr->sym_hash_size < sizeof(struct gsi_hash_header)) {
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -741,7 +741,7 @@ static int parse_public_symbol_stream(struct pdb_context *ctx)
 
     if (sizeof(struct gsi_hash_header) + hash_hdr->cb_hr + hash_hdr->cb_buckets !=
         hdr->sym_hash_size) {
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -757,7 +757,7 @@ static int parse_symbol_record_stream(struct pdb_context *ctx)
     uint16_t symbols_stream_idx = ctx->dbi_header->sym_record_stream;
     if (symbols_stream_idx >= ctx->nr_streams) {
         /* Invalid stream index */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -772,7 +772,7 @@ static int parse_symbol_record_stream(struct pdb_context *ctx)
         const SYMTYPE *next = NextSym(sym);
         if (sym + sizeof(SYMTYPE) > stream_end || next > stream_end || next <= sym) {
             /* Stream too short - not enough data left for the full symbol */
-            ctx->error = EPDB_FILE_CORRUPT;
+            ctx->error = EPDB_PARSE_ERROR;
             return -1;
         }
 
@@ -792,7 +792,7 @@ static int parse_symbol_record_stream(struct pdb_context *ctx)
 
     if (sym != stream_end) {
         /* Invalid stream size - does not match symbol contents */
-        ctx->error = EPDB_FILE_CORRUPT;
+        ctx->error = EPDB_PARSE_ERROR;
         return -1;
     }
 
@@ -926,6 +926,19 @@ void *pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn)
     return ctx;
 }
 
+void pdb_destroy_context(void *context)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+    if (ctx == NULL) {
+        return;
+    }
+
+    free_fn user_free_fn = ctx->free;
+
+    cleanup_pdb_context(ctx);
+    user_free_fn(ctx);
+}
+
 void pdb_reset_context(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -938,19 +951,6 @@ void pdb_reset_context(void *context)
 
     cleanup_pdb_context(ctx);
     initialize_pdb_context(ctx, user_malloc_fn, user_free_fn);
-}
-
-void pdb_destroy_context(void *context)
-{
-    struct pdb_context *ctx = (struct pdb_context *)context;
-    if (ctx == NULL) {
-        return;
-    }
-
-    free_fn user_free_fn = ctx->free;
-
-    cleanup_pdb_context(ctx);
-    user_free_fn(ctx);
 }
 
 int pdb_load(void *context, const void *pdbdata, size_t length)
@@ -994,16 +994,12 @@ void pdb_get_header(
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
-    /* clang-format off */
-    if (ctx == NULL || !ctx->pdb_loaded ||
-        block_size == NULL ||
-        nr_blocks == NULL ||
-        guid == NULL ||
-        age == NULL ||
-        nr_streams == NULL) {
-        return;
-    }
-    /* clang-format on */
+    PDB_ASSERT_CTX_NOT_NULL(ctx, /* no-retval */);
+    PDB_ASSERT_PDB_LOADED(ctx, /* no-retval */);
+    PDB_ASSERT_PARAMETER(
+        ctx, /* no-retval */,
+        block_size != NULL && nr_blocks != NULL && guid != NULL && age != NULL &&
+            nr_streams != NULL);
 
     *block_size = ctx->block_size;
     *nr_blocks = ctx->nr_blocks;
@@ -1052,16 +1048,6 @@ uint32_t pdb_get_age(void *context)
     return ctx->age;
 }
 
-uint32_t pdb_get_nr_streams(void *context)
-{
-    struct pdb_context *ctx = (struct pdb_context *)context;
-
-    PDB_ASSERT_CTX_NOT_NULL(ctx, 0);
-    PDB_ASSERT_PDB_LOADED(ctx, 0);
-
-    return ctx->nr_streams;
-}
-
 const unsigned char *pdb_get_stream(void *context, uint32_t stream_idx, uint32_t *stream_size)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
@@ -1079,14 +1065,14 @@ const unsigned char *pdb_get_stream(void *context, uint32_t stream_idx, uint32_t
     return ctx->streams[stream_idx].data;
 }
 
-uint32_t pdb_get_nr_sections(void *context)
+uint32_t pdb_get_nr_streams(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
     PDB_ASSERT_CTX_NOT_NULL(ctx, 0);
     PDB_ASSERT_PDB_LOADED(ctx, 0);
 
-    return ctx->nr_sections;
+    return ctx->nr_streams;
 }
 
 const struct image_section_header *pdb_get_sections(void *context)
@@ -1099,26 +1085,17 @@ const struct image_section_header *pdb_get_sections(void *context)
     return ctx->sections;
 }
 
-int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
+uint32_t pdb_get_nr_sections(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
-    PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
-    PDB_ASSERT_PDB_LOADED(ctx, -1);
-    PDB_ASSERT_PARAMETER(ctx, -1, nr_public_symbols != NULL);
+    PDB_ASSERT_CTX_NOT_NULL(ctx, 0);
+    PDB_ASSERT_PDB_LOADED(ctx, 0);
 
-    if (!ctx->symbol_streams_parsed) {
-        if (parse_symbol_streams(ctx) < 0) {
-            return -1;
-        }
-    }
-
-    *nr_public_symbols = ctx->nr_public_symbols;
-
-    return 0;
+    return ctx->nr_sections;
 }
 
-int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
+int pdb_get_symbols(void *context, const SYMTYPE **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1126,7 +1103,7 @@ int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
-    get_symbols(ctx, (const SYMTYPE **)symbols, true);
+    get_symbols(ctx, symbols, false);
 
     return 0;
 }
@@ -1150,7 +1127,7 @@ int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols)
     return 0;
 }
 
-int pdb_get_symbols(void *context, const SYMTYPE **symbols)
+int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -1158,7 +1135,26 @@ int pdb_get_symbols(void *context, const SYMTYPE **symbols)
     PDB_ASSERT_PDB_LOADED(ctx, -1);
     PDB_ASSERT_PARAMETER(ctx, -1, symbols != NULL);
 
-    get_symbols(ctx, symbols, false);
+    get_symbols(ctx, (const SYMTYPE **)symbols, true);
+
+    return 0;
+}
+
+int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols)
+{
+    struct pdb_context *ctx = (struct pdb_context *)context;
+
+    PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
+    PDB_ASSERT_PDB_LOADED(ctx, -1);
+    PDB_ASSERT_PARAMETER(ctx, -1, nr_public_symbols != NULL);
+
+    if (!ctx->symbol_streams_parsed) {
+        if (parse_symbol_streams(ctx) < 0) {
+            return -1;
+        }
+    }
+
+    *nr_public_symbols = ctx->nr_public_symbols;
 
     return 0;
 }

@@ -1,0 +1,68 @@
+.\" (C) Copyright 2020 Christian Sharpsten <christian.sharpsten@gmail.com>
+.\"
+.TH PDB_LOAD 3 2020-04-04 libpdb
+
+.SH NAME
+pdb_load \- parse an in-memory PDB file
+
+.SH SYNOPSIS
+.nf
+.B #include <pdb.h>
+.PP
+.BI "int pdb_load(void *" context ", const void *" pdbdata ", size_t " length );
+.fi
+
+.SH DESCRIPTION
+.BR pdb_load ()
+parses a PDB file of size
+.I length
+from address
+.IR pdbdata .
+.I context
+must be a valid context created by a call to
+.BR pdb_create_context (3).
+
+.SH RETURN VALUE
+.BR pdb_load ()
+returns 0, or -1 if an error occurred (in which case, detailed error
+information can be retrieved with
+.BR pdb_errno (3).
+On error,
+.I context
+remains uninitialized.
+
+.SH ERRORS
+.TP
+.B EPDB_ALLOCATION_FAILURE
+There was an internal error allocating memory.
+.TP
+.B EPDB_INVALID_PARAMETER
+.I context
+or
+.I pdbdata
+was NULL or
+.I length
+was 0.
+.TP
+.B EPDB_UNSUPPORTED_VERSION
+The parser encountered an unsupported version in the PDB file.
+.TP
+.B EPDB_PARSE_ERROR
+There was an error parsing the file.
+
+.SH NOTES
+The
+.BR pdb_sig_match (3)
+function can be used to optionally verify the file signature before loading the
+PDB.
+
+.SH SEE ALSO
+.BR pdb_sig_match (3),
+.BR pdb_create_context (3),
+.BR pdb_get_header (3),
+.BR pdb_get_stream (3),
+.BR pdb_get_sections (3),
+.BR pdb_get_symbols (3),
+.BR pdb_lookup_public_symbol (3),
+.BR pdb_errno (3),
+.BR pdb_strerror (3)

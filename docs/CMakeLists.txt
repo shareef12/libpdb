@@ -1,5 +1,16 @@
 install(
   FILES
     pdbparse.1
+    pdb_convert_section_offset_to_rva.3
+    pdb_create_context.3
+    pdb_errno.3
+    pdb_get_header.3
+    pdb_get_sections.3
+    pdb_get_stream.3
+    pdb_get_symbols.3
+    pdb_load.3
+    pdb_lookup_public_symbol.3
+    pdb_sig_match.3
+    pdb_strerror.3
   DESTINATION
     ${CMAKE_INSTALL_MANDIR}/man1)

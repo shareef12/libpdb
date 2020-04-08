@@ -20,7 +20,7 @@ typedef enum pdb_errno_t {
     EPDB_NO_PDB_LOADED,
     EPDB_INVALID_PARAMETER,
     EPDB_UNSUPPORTED_VERSION,
-    EPDB_FILE_CORRUPT,
+    EPDB_PARSE_ERROR,
     EPDB_INVALID_SECTION_IDX,
     EPDB_INVALID_SECTION_OFFSET,
     EPDB_NOT_FOUND,
@@ -54,14 +54,18 @@ struct image_section_header {
 typedef void *(*malloc_fn)(size_t size);
 typedef void (*free_fn)(void *ptr);
 
+/* Verify a PDB file's signature */
 PDB_EXPORT bool pdb_sig_match(void *data, size_t len);
 
+/* Initialize and destroy a libpdb parser */
 PDB_EXPORT void *pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn);
-PDB_EXPORT void pdb_reset_context(void *context);
 PDB_EXPORT void pdb_destroy_context(void *context);
+PDB_EXPORT void pdb_reset_context(void *context);
 
+/* Parse and in-memory PDB file */
 PDB_EXPORT int pdb_load(void *context, const void *pdbdata, size_t length);
 
+/* Get PDB header information */
 PDB_EXPORT void pdb_get_header(
     void *context,
     uint32_t *block_size,
@@ -74,28 +78,32 @@ PDB_EXPORT uint32_t pdb_get_nr_blocks(void *context);
 PDB_EXPORT const struct guid *pdb_get_guid(void *context);
 PDB_EXPORT uint32_t pdb_get_age(void *context);
 
-PDB_EXPORT uint32_t pdb_get_nr_streams(void *context);
+/* Get a raw PDB stream */
 PDB_EXPORT const unsigned char *pdb_get_stream(
     void *context, uint32_t stream_idx, uint32_t *stream_size);
+PDB_EXPORT uint32_t pdb_get_nr_streams(void *context);
 
-PDB_EXPORT uint32_t pdb_get_nr_sections(void *context);
+/* Get an image's section headers */
 PDB_EXPORT const struct image_section_header *pdb_get_sections(void *context);
+PDB_EXPORT uint32_t pdb_get_nr_sections(void *context);
 
-/* Iterate only through public symbols */
-PDB_EXPORT int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols);
-PDB_EXPORT int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols);
-
-/* Iterate through *all* symbols (public + global) */
-PDB_EXPORT int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
+/* Enumerate PDB symbols - public and global */
 PDB_EXPORT int pdb_get_symbols(void *context, const struct SYMTYPE **symbols);
+PDB_EXPORT int pdb_get_nr_symbols(void *context, uint32_t *nr_symbols);
 
-/* Find a symbol by looking it up in the PDB symbol hashtable */
+/* Enumerate PDB symbols - public only */
+PDB_EXPORT int pdb_get_public_symbols(void *context, const PUBSYM32 **symbols);
+PDB_EXPORT int pdb_get_nr_public_symbols(void *context, uint32_t *nr_public_symbols);
+
+/* Find a public symbol by hash */
 PDB_EXPORT const PUBSYM32 *pdb_lookup_public_symbol(
     void *context, const char *name, bool case_sensitive);
 
+/* Convert a section index/offset pair to an RVA */
 PDB_EXPORT int pdb_convert_section_offset_to_rva(
     void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
 
+/* Get libpdb error information */
 PDB_EXPORT pdb_errno_t pdb_errno(void *context);
 PDB_EXPORT const char *pdb_strerror(void *context);
 
