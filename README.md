@@ -1,4 +1,4 @@
-# libpdb
+# libpdb [![Build Status](https://travis-ci.org/shareef12/libpdb.svg?branch=master)](https://travis-ci.org/shareef12/libpdb)
 
 libpdb is a Linux library for parsing Microsoft Program Database (PDB) files.
 
