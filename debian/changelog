@@ -1,3 +1,9 @@
+libpdb (0.1.0-2) unstable; urgency=medium
+
+  * debian: add missing build-dep
+
+ -- Christian Sharpsten <christian.sharpsten@gmail.com>  Thu, 09 Apr 2020 03:01:05 +0000
+
 libpdb (0.1.0-1) unstable; urgency=medium
 
   * Initial release

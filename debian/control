@@ -1,7 +1,7 @@
 Source: libpdb
 Priority: optional
 Maintainer: Christian Sharpsten <christian.sharpsten@gmail.com>
-Build-Depends: debhelper (>= 11)
+Build-Depends: debhelper (>= 11), cmake
 Standards-Version: 4.1.4
 Section: libs
 Homepage: https://github.com/shareef12/libpdb
