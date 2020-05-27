@@ -41,8 +41,8 @@
 #define IMAGE_DEBUG_TYPE_FIXUP 6
 #define IMAGE_DEBUG_TYPE_BORLAND 9
 
-#define CV_SIGNATURE_NB10 0x3031424e    /* '01BN' - PDB 2.0.0 (not supported) */
-#define CV_SIGNATURE_RSDS 0x53445352    /* 'SDSR' - PDB 7.0.0 (current) */
+#define CV_SIGNATURE_NB10 0x3031424e /* '01BN' - PDB 2.0.0 (not supported) */
+#define CV_SIGNATURE_RSDS 0x53445352 /* 'SDSR' - PDB 7.0.0 (current) */
 
 struct image_dos_header {
     uint16_t e_magic;
@@ -184,4 +184,4 @@ struct cv_info_pdb70 {
 
 #pragma pack(pop)
 
-#endif // PDB_PE_H
+#endif  // PDB_PE_H

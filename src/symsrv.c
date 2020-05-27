@@ -143,12 +143,11 @@
 /* Maximum size of a GUID and a uint32_t value concatenated */
 #define MAX_GUID_AGE_STR_SIZE (GUID_STR_SIZE + 10)
 
-
 struct image_pdb_info {
-    const char *pdb_pathname;   /* The PDB path embedded in the image */
-    const char *pdb_basename;   /* The basename of the image without an extension */
-    const struct guid *guid;    /* The PDB guid */
-    uint32_t age;               /* The PDB age */
+    const char *pdb_pathname; /* The PDB path embedded in the image */
+    const char *pdb_basename; /* The basename of the image without an extension */
+    const struct guid *guid;  /* The PDB guid */
+    uint32_t age;             /* The PDB age */
 };
 
 struct found_pdb_info {
@@ -172,7 +171,6 @@ struct parsed_sympath {
     struct sympath_part parts[];
 };
 
-
 static bool is_url(const char *path)
 {
     return strncmp(path, "http://", 7) == 0 || strncmp(path, "https://", 8) == 0;
@@ -181,9 +179,9 @@ static bool is_url(const char *path)
 static int snprintf_guid(char *str, size_t size, const struct guid *guid)
 {
     return snprintf(
-        str, size, "%08x%04hx%04hx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-        guid->data1, guid->data2, guid->data3, guid->data4[0], guid->data4[1], guid->data4[2],
-        guid->data4[3], guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
+        str, size, "%08x%04hx%04hx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx", guid->data1,
+        guid->data2, guid->data3, guid->data4[0], guid->data4[1], guid->data4[2], guid->data4[3],
+        guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
 }
 
 /**
@@ -191,7 +189,7 @@ static int snprintf_guid(char *str, size_t size, const struct guid *guid)
  *
  * Callers should free the returned buffer with pdb_free.
  */
-static const char * get_default_symcache_path(void)
+static const char *get_default_symcache_path(void)
 {
     size_t user_cache_sz = sys_get_user_cache_dir(NULL, 0);
 
@@ -285,7 +283,7 @@ static int parse_symbol_path(const char *sympath, struct parsed_sympath **parsed
             location = pdb_strtok_r(NULL, "*", &c2);
         }
 
-parse_next_part:
+    parse_next_part:
         pdb_strtok_r(NULL, ";", &c);
     }
 
@@ -300,7 +298,8 @@ static void free_symbol_path(struct parsed_sympath *parsed_sympath)
     pdb_free(parsed_sympath);
 }
 
-static int vread_file_from_path(unsigned char **data, size_t *length, const char *pathfmt, va_list ap)
+static int vread_file_from_path(
+    unsigned char **data, size_t *length, const char *pathfmt, va_list ap)
 {
     va_list aq;
 
@@ -352,7 +351,11 @@ static int read_file_from_path(unsigned char **data, size_t *length, const char 
  * Check to see if the PDB at pathname has the specified guid and age.
  */
 static bool try_load_pdb_from_path(
-    struct pdb_context *ctx, struct image_pdb_info *imageinfo, struct found_pdb_info *pdbinfo, const char *pathfmt, ...)
+    struct pdb_context *ctx,
+    struct image_pdb_info *imageinfo,
+    struct found_pdb_info *pdbinfo,
+    const char *pathfmt,
+    ...)
 {
     va_list ap;
     unsigned char *pdbdata = NULL;
@@ -373,7 +376,9 @@ static bool try_load_pdb_from_path(
     }
 
     /* The PDB is a match if the guid and age are the same */
-    if (memcmp(imageinfo->guid, pdb_get_guid(ctx), sizeof(struct guid) == 0 && imageinfo->age == pdb_get_age(ctx))) {
+    if (memcmp(
+            imageinfo->guid, pdb_get_guid(ctx),
+            sizeof(struct guid) == 0 && imageinfo->age == pdb_get_age(ctx))) {
         pdbinfo->pdb_data = pdbdata;
         pdbinfo->pdb_data_len = pdbdata_len;
         return true;
@@ -405,7 +410,9 @@ static bool try_load_pdb_from_symsrv(
     snprintf_guid(sguid, sizeof(sguid), imageinfo->guid);
 
     /* Check <cachepath> / <pdbname> / <guid><age> / <pdbname> */
-    if (try_load_pdb_from_path(ctx, imageinfo, pdbinfo, "%s/%s/%s%u/%s.pdb", symstore, imageinfo->pdb_basename, sguid, imageinfo->age, imageinfo->pdb_basename)) {
+    if (try_load_pdb_from_path(
+            ctx, imageinfo, pdbinfo, "%s/%s/%s%u/%s.pdb", symstore, imageinfo->pdb_basename, sguid,
+            imageinfo->age, imageinfo->pdb_basename)) {
         return true;
     }
 
@@ -414,7 +421,9 @@ static bool try_load_pdb_from_symsrv(
     /* Check <cachepath> / <pdbname> / <guid><age> / file.ptr */
     char *file_ptr = NULL;
     size_t file_ptr_len = 0;
-    if (read_file_from_path((unsigned char **)&file_ptr, &file_ptr_len, "%s/%s/%s%u/file.ptr", symstore, imageinfo->pdb_basename, sguid, imageinfo->age) < 0) {
+    if (read_file_from_path(
+            (unsigned char **)&file_ptr, &file_ptr_len, "%s/%s/%s%u/file.ptr", symstore,
+            imageinfo->pdb_basename, sguid, imageinfo->age) < 0) {
         return false;
     }
 
@@ -447,7 +456,8 @@ static bool try_load_pdb_from_local_path(
     }
 
     /* Check for various local paths */
-    if (try_load_pdb_from_path(ctx, imageinfo, pdbinfo, "%s/%s.pdb", symstore, imageinfo->pdb_basename)) {
+    if (try_load_pdb_from_path(
+            ctx, imageinfo, pdbinfo, "%s/%s.pdb", symstore, imageinfo->pdb_basename)) {
         return true;
     }
 
@@ -457,15 +467,19 @@ static bool try_load_pdb_from_local_path(
      * all file IO for us. It might be slightly less efficient, but we just try
      * all common extensions instead.
      */
-    static const char *known_extensions[] = { "dll", "exe", "sys"};
+    static const char *known_extensions[] = {"dll", "exe", "sys"};
     for (size_t i = 0; i < ARRAY_SIZE(known_extensions); i++) {
-        if (try_load_pdb_from_path(ctx, imageinfo, pdbinfo, "%s/%s/%s.pdb", symstore, known_extensions[i], imageinfo->pdb_basename)) {
+        if (try_load_pdb_from_path(
+                ctx, imageinfo, pdbinfo, "%s/%s/%s.pdb", symstore, known_extensions[i],
+                imageinfo->pdb_basename)) {
             return true;
         }
     }
 
     for (size_t i = 0; i < ARRAY_SIZE(known_extensions); i++) {
-        return try_load_pdb_from_path(ctx, imageinfo, pdbinfo, "%s/symbols/%s/%s.pdb", symstore, known_extensions[i], imageinfo->pdb_basename);
+        return try_load_pdb_from_path(
+            ctx, imageinfo, pdbinfo, "%s/symbols/%s/%s.pdb", symstore, known_extensions[i],
+            imageinfo->pdb_basename);
     }
 
     return false;
@@ -516,7 +530,7 @@ static int load_pdb_from_sympath(
  * specifies multiple cache locations, this function returns the first cache
  * location in the sympath where this PDB was successfully stored.
  */
-static char * copy_pdb_to_sympath_caches(
+static char *copy_pdb_to_sympath_caches(
     struct parsed_sympath *sympath,
     size_t found_idx,
     struct image_pdb_info *imageinfo,
@@ -537,7 +551,9 @@ static char * copy_pdb_to_sympath_caches(
          * Write the PDB to <cachepath> / <pdbname> / <guid><age> / <pdbname>
          * if it doesn't already exist.
          */
-        char *pathname = pdb_asprintf("%s/%s/%s%u/%s", part->location, imageinfo->pdb_basename, sguid, imageinfo->age, imageinfo->pdb_basename);
+        char *pathname = pdb_asprintf(
+            "%s/%s/%s%u/%s", part->location, imageinfo->pdb_basename, sguid, imageinfo->age,
+            imageinfo->pdb_basename);
         if (pathname == NULL) {
             continue;
         }
@@ -567,7 +583,9 @@ static char * copy_pdb_to_sympath_caches(
             return NULL;
         }
 
-        char *pathname = pdb_asprintf("%s/%s/%s%u/%s", default_symcache, imageinfo->pdb_basename, sguid, imageinfo->age, imageinfo->pdb_basename);
+        char *pathname = pdb_asprintf(
+            "%s/%s/%s%u/%s", default_symcache, imageinfo->pdb_basename, sguid, imageinfo->age,
+            imageinfo->pdb_basename);
         pdb_free((void *)default_symcache);
         if (pathname == NULL) {
             return NULL;
@@ -587,7 +605,8 @@ static char * copy_pdb_to_sympath_caches(
     return last_pathname;
 }
 
-static int rva_to_offset(uint32_t rva, const struct image_section_header *sections, uint16_t nr_sections, off_t *offset)
+static int rva_to_offset(
+    uint32_t rva, const struct image_section_header *sections, uint16_t nr_sections, off_t *offset)
 {
     for (uint16_t i = 0; i < nr_sections; i++) {
         const struct image_section_header *scn = &sections[i];
@@ -609,11 +628,16 @@ static int rva_to_offset(uint32_t rva, const struct image_section_header *sectio
     return -1;
 }
 
-static int offset_to_rva(uint32_t offset, const struct image_section_header *sections, uint16_t nr_sections, uint32_t *rva)
+static int offset_to_rva(
+    uint32_t offset,
+    const struct image_section_header *sections,
+    uint16_t nr_sections,
+    uint32_t *rva)
 {
     for (uint16_t i = 0; i < nr_sections; i++) {
         const struct image_section_header *scn = &sections[i];
-        if (scn->pointer_to_raw_data <= offset && offset < scn->pointer_to_raw_data + scn->size_of_raw_data) {
+        if (scn->pointer_to_raw_data <= offset &&
+            offset < scn->pointer_to_raw_data + scn->size_of_raw_data) {
             uint32_t scn_offset = offset - scn->pointer_to_raw_data;
             *rva = scn->virtual_address + scn_offset;
             return 0;
@@ -623,7 +647,8 @@ static int offset_to_rva(uint32_t offset, const struct image_section_header *sec
     return -1;
 }
 
-static int get_image_pdb_info(const unsigned char *imagedata, size_t imagelen, bool mapped, struct image_pdb_info *imageinfo)
+static int get_image_pdb_info(
+    const unsigned char *imagedata, size_t imagelen, bool mapped, struct image_pdb_info *imageinfo)
 {
     if (imagelen < sizeof(struct image_dos_header)) {
         /* Too small for DOS header */
@@ -684,12 +709,14 @@ static int get_image_pdb_info(const unsigned char *imagedata, size_t imagelen, b
      * to offsets in order to find the debug directory.
      */
     uint16_t nr_sections = nthdrs->file_header.number_of_sections;
-    off_t shdrs_offset = nthdrs_offset + sizeof(struct image_nt_headers) + nthdrs->file_header.size_of_optional_header;
+    off_t shdrs_offset = nthdrs_offset + sizeof(struct image_nt_headers) +
+        nthdrs->file_header.size_of_optional_header;
     if (imagelen - shdrs_offset < sizeof(struct image_section_header) * nr_sections) {
         /* Too small for all section headers */
         return -1;
     }
-    struct image_section_header *sections = (struct image_section_header *)(imagedata + shdrs_offset);
+    struct image_section_header *sections =
+        (struct image_section_header *)(imagedata + shdrs_offset);
 
     /* Get the debug directory data offset */
     off_t dbg_offset = 0;
@@ -783,7 +810,7 @@ static void free_image_pdb_info(struct image_pdb_info *imageinfo)
     memset(imageinfo, 0, sizeof(struct image_pdb_info));
 }
 
-const char * pdb_get_symbol_path(void *context)
+const char *pdb_get_symbol_path(void *context)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
@@ -827,7 +854,13 @@ int pdb_append_symbol_path(void *context, const char *symbol_path_part)
     return 0;
 }
 
-int pdb_load_from_sympath(void *context, const void *image, size_t length, bool mapped, bool check_pdbpath, const char **pdb_pathname)
+int pdb_load_from_sympath(
+    void *context,
+    const void *image,
+    size_t length,
+    bool mapped,
+    bool check_pdbpath,
+    const char **pdb_pathname)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 

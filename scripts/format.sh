@@ -11,4 +11,9 @@ clang-format --style=file -i    \
     include/pdb/pdbstream.h     \
     src/config.h.in             \
     src/pdb.c                   \
-    src/pdbparse.c
+    src/pdbparse.c              \
+    src/pdbint.h                \
+    src/pe.h                    \
+    src/symsrv.c                \
+    src/sys-linux.c             \
+    src/sysdep.h

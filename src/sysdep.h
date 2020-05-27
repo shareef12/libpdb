@@ -10,7 +10,7 @@ bool sys_is_file(const char *pathname);
 
 bool sys_is_directory(const char *pathname);
 
-char * sys_basename(const char *pathname);
+char *sys_basename(const char *pathname);
 
 int sys_makedirs(const char *dirpath);
 

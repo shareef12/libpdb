@@ -60,7 +60,8 @@ typedef void *(*realloc_fn)(void *ptr, size_t size);
 PDB_EXPORT bool pdb_sig_match(void *data, size_t len);
 
 /* Set a custom allocator for libpdb use */
-PDB_EXPORT void pdb_global_init_mem(malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn);
+PDB_EXPORT void pdb_global_init_mem(
+    malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn);
 
 /* Initialize and destroy a libpdb parser */
 PDB_EXPORT void *pdb_create_context(void);
@@ -114,7 +115,13 @@ PDB_EXPORT void pdb_set_symbol_path(void *context, const char *symbol_path);
 PDB_EXPORT int pdb_append_symbol_path(void *context, const char *symbol_path_part);
 
 /* Load a PDB file for an executable */
-PDB_EXPORT int pdb_load_from_sympath(void *context, const void *image, size_t length, bool mapped, bool check_pdbpath, const char **pdb_pathname);
+PDB_EXPORT int pdb_load_from_sympath(
+    void *context,
+    const void *image,
+    size_t length,
+    bool mapped,
+    bool check_pdbpath,
+    const char **pdb_pathname);
 
 /* TODO: Add support for configuring an HTTP proxy */
 

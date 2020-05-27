@@ -9,8 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 struct curl_mem_buffer {
@@ -59,7 +59,7 @@ bool sys_is_directory(const char *pathname)
     return false;
 }
 
-char * sys_basename(const char *pathname)
+char *sys_basename(const char *pathname)
 {
     char *pathsep = strrchr(pathname, '/');
     if (pathsep == NULL) {
@@ -175,7 +175,7 @@ int sys_download_file(const char *url, unsigned char **data, size_t *length)
         .size = 0,
     };
 
-    //curl_global_init(CURL_GLOBAL_ALL);
+    // curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl_handle = curl_easy_init();
 
