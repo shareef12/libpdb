@@ -1,6 +1,6 @@
 # Create an object library so we only have to build pdb.c once when producing
 # both static and shared library configurations.
-add_library(pdb_object OBJECT pdb.c)
+add_library(pdb_object OBJECT pdb.c symsrv.c sys-linux.c util.c)
 target_compile_options(pdb_object PRIVATE ${PDB_STRICT_COMPILE_OPTIONS})
 set_target_properties(pdb_object
   PROPERTIES
@@ -25,6 +25,7 @@ target_compile_features(pdb_object_interface
 target_include_directories(pdb_object_interface
   INTERFACE
     $<TARGET_PROPERTY:pdb_object,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(pdb_object_interface INTERFACE curl)
 
 # Build libpdb.so and libpdb.a
 add_library(pdb SHARED $<TARGET_OBJECTS:pdb_object>)

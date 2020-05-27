@@ -4,6 +4,8 @@
 #include "pdb/gsistream.h"
 #include "pdb/msf.h"
 #include "pdb/pdbstream.h"
+#include "pdbint.h"
+#include "util.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -20,13 +22,8 @@
 #include <signal.h>
 #include <stdio.h>
 
-#ifdef PDB_ENABLE_ASSERTIONS
-#include <assert.h>
-#endif  // PDB_ENABLE_ASSERTIONS
-
 #define PDB_SIGNATURE "Microsoft C/C++ MSF 7.00\r\n\x1a\x44\x53\x00\x00\x00"
 
-#define ARRAY_SIZE(array) (sizeof(array) / sizeof(*(array)))
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
 /*
@@ -37,97 +34,6 @@
 extern __INLINE SYMTYPE *NextSym(const SYMTYPE *pSym);
 /* NOLINTNEXTLINE(readability-redundant-declaration) */
 extern __INLINE char *NextType(const char *pType);
-
-/*
- * libpdb uses assertions to catch usage errors when configured with
- * PDB_ENABLE_ASSERTIONS. Otherwise, it introduces additional semantics to
- * prevent an immediate crash.
- */
-#if defined(PDB_ENABLE_ASSERTIONS) && !defined(NDEBUG)
-
-#define PDB_ASSERT(expr) assert(expr)
-#define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) assert((ctx) != NULL)
-#define PDB_ASSERT_PDB_LOADED(ctx, retval) assert((ctx)->pdb_loaded)
-#define PDB_ASSERT_PARAMETER(ctx, retval, expr) assert(expr)
-
-#else
-
-#define PDB_ASSERT(expr)
-
-#define PDB_ASSERT_CTX_NOT_NULL(ctx, retval) \
-    do {                                     \
-        if ((ctx) == NULL) {                 \
-            return (retval);                 \
-        }                                    \
-    } while (0)
-
-#define PDB_ASSERT_PDB_LOADED(ctx, retval)     \
-    do {                                       \
-        if (!(ctx)->pdb_loaded) {              \
-            (ctx)->error = EPDB_NO_PDB_LOADED; \
-            return (retval);                   \
-        }                                      \
-    } while (0)
-
-#define PDB_ASSERT_PARAMETER(ctx, retval, expr)    \
-    do {                                           \
-        if (!(expr)) {                             \
-            (ctx)->error = EPDB_INVALID_PARAMETER; \
-            return (retval);                       \
-        }                                          \
-    } while (0)
-
-#endif  // PDB_ENABLE_ASSERTIONS
-
-struct stream {
-    uint32_t size;
-    const unsigned char *data;
-};
-
-struct sym_hashrec {
-    const SYMTYPE *sym;
-    const struct sym_hashrec *next;
-    uint32_t c_ref;
-};
-
-struct sym_hashtable {
-    struct sym_hashrec *buckets[NR_HASH_BUCKETS];
-    struct sym_hashrec *hashrecs;
-};
-
-struct pdb_context {
-    /* User-supplied memory alloc/free functions */
-    malloc_fn malloc;
-    free_fn free;
-    pdb_errno_t error;
-
-    /* true if we've loaded a pdb */
-    bool pdb_loaded;
-
-    /* Raw stream data */
-    const struct stream *streams;
-    uint32_t nr_streams;
-
-    /* PDB Header Information */
-    uint32_t block_size;
-    uint32_t nr_blocks;
-    struct guid guid;
-    uint32_t age;
-
-    /* Image section headers (post-optimization) */
-    const struct image_section_header *sections;
-    uint32_t nr_sections;
-
-    /* Cached DBI stream info - this stream contains useful stream indices */
-    const struct dbi_stream_header *dbi_header;
-    const struct debug_header *dbg_header;
-
-    /* Cached symbol information */
-    bool symbol_streams_parsed;
-    uint32_t nr_symbols;
-    uint32_t nr_public_symbols;
-    struct sym_hashtable pubsym_hashtab;
-};
 
 static const char *errstrings[] = {
     "No error",
@@ -142,13 +48,9 @@ static const char *errstrings[] = {
     "Not found",
 };
 
-static void initialize_pdb_context(
-    struct pdb_context *ctx, malloc_fn user_malloc_fn, free_fn user_free_fn)
+static void initialize_pdb_context(struct pdb_context *ctx)
 {
     memset(ctx, 0, sizeof(*ctx));
-
-    ctx->malloc = user_malloc_fn ? user_malloc_fn : malloc;
-    ctx->free = user_free_fn ? user_free_fn : free;
 
     ctx->error = EPDB_SUCCESS;
     ctx->pdb_loaded = false;
@@ -157,13 +59,18 @@ static void initialize_pdb_context(
 
 static void cleanup_pdb_context(struct pdb_context *ctx)
 {
+    if (ctx->pdb_pathname != NULL) {
+        pdb_free((void *)ctx->pdb_pathname);
+        ctx->pdb_pathname = NULL;
+    }
+
     if (ctx->streams != NULL) {
-        ctx->free((void *)ctx->streams);
+        pdb_free((void *)ctx->streams);
         ctx->streams = NULL;
     }
 
     if (ctx->pubsym_hashtab.hashrecs != NULL) {
-        ctx->free(ctx->pubsym_hashtab.hashrecs);
+        pdb_free(ctx->pubsym_hashtab.hashrecs);
         ctx->pubsym_hashtab.hashrecs = NULL;
     }
 
@@ -225,7 +132,7 @@ static int extract_stream_directory(
     }
 
     /* Allocate memory in a multiple of block_size to simplify copying */
-    unsigned char *sd = ctx->malloc(sb->block_size * nr_sd_blocks);
+    unsigned char *sd = pdb_malloc(sb->block_size * nr_sd_blocks);
     if (sd == NULL) {
         ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
@@ -289,7 +196,7 @@ static int do_extract_streams(
         total_sz += nr_blocks(stream_sizes[i], sb->block_size) * sb->block_size;
     }
 
-    struct stream *strms = ctx->malloc(total_sz);
+    struct stream *strms = pdb_malloc(total_sz);
     if (strms == NULL) {
         ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
@@ -541,7 +448,7 @@ static int parse_pubsym_hashtable(struct pdb_context *ctx, const struct gsi_hash
 
     /* Allocate the hashrecs array to contain fixed-up hash chains */
     uint32_t nr_hashrecs = hdr->cb_hr / sizeof(struct gsi_hashrec);
-    hashrecs = ctx->malloc(nr_hashrecs * sizeof(struct sym_hashrec));
+    hashrecs = pdb_malloc(nr_hashrecs * sizeof(struct sym_hashrec));
     if (hashrecs == NULL) {
         ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
@@ -704,7 +611,7 @@ err_pdb_corrupt:
     memset(ctx->pubsym_hashtab.buckets, 0, sizeof(ctx->pubsym_hashtab.buckets));
 
     if (hashrecs != NULL) {
-        ctx->free(hashrecs);
+        pdb_free(hashrecs);
     }
 
     ctx->error = EPDB_PARSE_ERROR;
@@ -911,17 +818,25 @@ bool pdb_sig_match(void *data, size_t len)
     return memcmp(data, PDB_SIGNATURE, min(len, PDB_SIGNATURE_SZ)) == 0;
 }
 
-void *pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn)
+void pdb_global_init_mem(malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn)
 {
-    user_malloc_fn = user_malloc_fn ? user_malloc_fn : malloc;
-    user_free_fn = user_free_fn ? user_free_fn : free;
+    if (user_malloc_fn == NULL || user_free_fn == NULL || user_realloc_fn == NULL) {
+        return;
+    }
 
-    struct pdb_context *ctx = user_malloc_fn(sizeof(struct pdb_context));
+    pdb_malloc = user_malloc_fn;
+    pdb_free = user_free_fn;
+    pdb_realloc = user_realloc_fn;
+}
+
+void *pdb_create_context()
+{
+    struct pdb_context *ctx = pdb_malloc(sizeof(struct pdb_context));
     if (ctx == NULL) {
         return NULL;
     }
 
-    initialize_pdb_context(ctx, user_malloc_fn, user_free_fn);
+    initialize_pdb_context(ctx);
 
     return ctx;
 }
@@ -933,10 +848,8 @@ void pdb_destroy_context(void *context)
         return;
     }
 
-    free_fn user_free_fn = ctx->free;
-
     cleanup_pdb_context(ctx);
-    user_free_fn(ctx);
+    pdb_free(ctx);
 }
 
 void pdb_reset_context(void *context)
@@ -946,11 +859,8 @@ void pdb_reset_context(void *context)
         return;
     }
 
-    malloc_fn user_malloc_fn = ctx->malloc;
-    free_fn user_free_fn = ctx->free;
-
     cleanup_pdb_context(ctx);
-    initialize_pdb_context(ctx, user_malloc_fn, user_free_fn);
+    initialize_pdb_context(ctx);
 }
 
 int pdb_load(void *context, const void *pdbdata, size_t length)

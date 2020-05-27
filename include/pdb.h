@@ -24,6 +24,7 @@ typedef enum pdb_errno_t {
     EPDB_INVALID_SECTION_IDX,
     EPDB_INVALID_SECTION_OFFSET,
     EPDB_NOT_FOUND,
+    EPDB_INVALID_IMAGE_NAME,
 } pdb_errno_t;
 
 struct guid {
@@ -53,16 +54,20 @@ struct image_section_header {
 
 typedef void *(*malloc_fn)(size_t size);
 typedef void (*free_fn)(void *ptr);
+typedef void *(*realloc_fn)(void *ptr, size_t size);
 
 /* Verify a PDB file's signature */
 PDB_EXPORT bool pdb_sig_match(void *data, size_t len);
 
+/* Set a custom allocator for libpdb use */
+PDB_EXPORT void pdb_global_init_mem(malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn);
+
 /* Initialize and destroy a libpdb parser */
-PDB_EXPORT void *pdb_create_context(malloc_fn user_malloc_fn, free_fn user_free_fn);
+PDB_EXPORT void *pdb_create_context(void);
 PDB_EXPORT void pdb_destroy_context(void *context);
 PDB_EXPORT void pdb_reset_context(void *context);
 
-/* Parse and in-memory PDB file */
+/* Parse an in-memory PDB file */
 PDB_EXPORT int pdb_load(void *context, const void *pdbdata, size_t length);
 
 /* Get PDB header information */
@@ -102,6 +107,16 @@ PDB_EXPORT const PUBSYM32 *pdb_lookup_public_symbol(
 /* Convert a section index/offset pair to an RVA */
 PDB_EXPORT int pdb_convert_section_offset_to_rva(
     void *context, uint16_t section_idx, uint32_t section_offset, uint32_t *rva);
+
+/* Get or set the symbol path for PDB retrieval */
+PDB_EXPORT const char *pdb_get_symbol_path(void *context);
+PDB_EXPORT void pdb_set_symbol_path(void *context, const char *symbol_path);
+PDB_EXPORT int pdb_append_symbol_path(void *context, const char *symbol_path_part);
+
+/* Load a PDB file for an executable */
+PDB_EXPORT int pdb_load_from_sympath(void *context, const void *image, size_t length, bool mapped, bool check_pdbpath, const char **pdb_pathname);
+
+/* TODO: Add support for configuring an HTTP proxy */
 
 /* Get libpdb error information */
 PDB_EXPORT pdb_errno_t pdb_errno(void *context);

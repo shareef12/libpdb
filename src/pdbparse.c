@@ -55,7 +55,7 @@ void *open_pdb_file(const char *pathname)
         goto err_munmap_pdbdata;
     }
 
-    void *ctx = pdb_create_context(NULL, NULL);
+    void *ctx = pdb_create_context();
     if (ctx == NULL) {
         fprintf(stderr, "Could not allocate libpdb context\n");
         goto err_munmap_pdbdata;
