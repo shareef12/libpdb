@@ -1,5 +1,5 @@
-#ifndef PDB_SYSDEP_H
-#define PDB_SYSDEP_H
+#ifndef LIBPDB_SYSDEP_H
+#define LIBPDB_SYSDEP_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -22,4 +22,4 @@ int sys_download_file(const char *url, unsigned char **data, size_t *length);
 
 size_t sys_get_user_cache_dir(char *dirpath, size_t dirpath_len);
 
-#endif  // PDB_SYSDEP_H
+#endif  // LIBPDB_SYSDEP_H

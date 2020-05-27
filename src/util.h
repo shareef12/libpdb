@@ -1,5 +1,5 @@
-#ifndef PDB_UTIL_H
-#define PDB_UTIL_H
+#ifndef LIBPDB_UTIL_H
+#define LIBPDB_UTIL_H
 
 #include "pdb.h"
 #include "pdbint.h"
@@ -29,4 +29,4 @@ char * pdb_vasprintf(const char *format, va_list ap);
  */
 char * pdb_strtok_r(char *str, const char *delim, char **saveptr);
 
-#endif  // PDB_UTIL_H
+#endif  // LIBPDB_UTIL_H

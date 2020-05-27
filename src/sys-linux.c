@@ -51,7 +51,7 @@ bool sys_is_file(const char *pathname)
 
 bool sys_is_directory(const char *pathname)
 {
-    int fd = open(pathname, O_DIRECTORY);
+    int fd = open(pathname, O_DIRECTORY | O_CLOEXEC); /* NOLINT(hicpp-signed-bitwise) */
     if (fd >= 0) {
         close(fd);
         return true;
@@ -119,7 +119,7 @@ int sys_makedirs(const char *dirpath)
 
 int sys_read_file(const char *pathname, unsigned char **data, size_t *length)
 {
-    int fd = open(pathname, O_RDONLY | O_CLOEXEC);
+    int fd = open(pathname, O_RDONLY | O_CLOEXEC); /* NOLINT(hicpp-signed-bitwise) */
     if (fd < 0) {
         return -1;
     }
@@ -157,7 +157,9 @@ err_close_fd:
 
 int sys_write_file(const char *pathname, const unsigned char *data, size_t length)
 {
-    int fd = open(pathname, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0664);
+    int fd = open(
+        pathname, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, /* NOLINT(hicpp-signed-bitwise) */
+        0664);
     if (fd < 0) {
         return -1;
     }
@@ -175,7 +177,7 @@ int sys_download_file(const char *url, unsigned char **data, size_t *length)
         .size = 0,
     };
 
-    // curl_global_init(CURL_GLOBAL_ALL);
+    // TODO(shareef12): curl_global_init(CURL_GLOBAL_ALL);
 
     CURL *curl_handle = curl_easy_init();
 
@@ -191,7 +193,7 @@ int sys_download_file(const char *url, unsigned char **data, size_t *length)
 
     curl_easy_cleanup(curl_handle);
 
-    // curl_global_cleanup();
+    // TODO(shareef12): curl_global_cleanup();
 
     *data = buf.mem;
     *length = buf.size;

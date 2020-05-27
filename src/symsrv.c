@@ -376,9 +376,8 @@ static bool try_load_pdb_from_path(
     }
 
     /* The PDB is a match if the guid and age are the same */
-    if (memcmp(
-            imageinfo->guid, pdb_get_guid(ctx),
-            sizeof(struct guid) == 0 && imageinfo->age == pdb_get_age(ctx))) {
+    if (memcmp(imageinfo->guid, pdb_get_guid(ctx), sizeof(struct guid)) == 0 &&
+        imageinfo->age == pdb_get_age(ctx)) {
         pdbinfo->pdb_data = pdbdata;
         pdbinfo->pdb_data_len = pdbdata_len;
         return true;
@@ -834,18 +833,18 @@ int pdb_append_symbol_path(void *context, const char *symbol_path_part)
 
     PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
 
-    /* Make a copy of symbol_path_part length to prevent TOCTOU during copy */
+    size_t old_sympath_len = strlen(ctx->symbol_path);
     size_t part_len = strlen(symbol_path_part);
 
-    size_t new_len = strlen(ctx->symbol_path) + 1 + part_len + 1;
+    size_t new_len = old_sympath_len + 1 + part_len + 1;
     char *new_sympath = pdb_malloc(new_len);
     if (new_sympath == NULL) {
         ctx->error = EPDB_ALLOCATION_FAILURE;
         return -1;
     }
 
-    strcpy(new_sympath, ctx->symbol_path);
-    strcat(new_sympath, ";");
+    strncpy(new_sympath, ctx->symbol_path, old_sympath_len);
+    strncat(new_sympath, ";", 2);
     strncat(new_sympath, symbol_path_part, part_len);
 
     pdb_free((void *)ctx->symbol_path);

@@ -1,5 +1,5 @@
-#ifndef PDBINT_H
-#define PDBINT_H
+#ifndef LIBPDB_PDBINT_H
+#define LIBPDB_PDBINT_H
 
 #include "pdb.h"
 
@@ -108,4 +108,4 @@ struct pdb_context {
     struct sym_hashtable pubsym_hashtab;
 };
 
-#endif  // PDBINT_H
+#endif  // LIBPDB_PDBINT_H

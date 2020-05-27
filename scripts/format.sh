@@ -16,4 +16,6 @@ clang-format --style=file -i    \
     src/pe.h                    \
     src/symsrv.c                \
     src/sys-linux.c             \
-    src/sysdep.h
+    src/sysdep.h                \
+    src/util.c                  \
+    src/util.c

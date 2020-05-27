@@ -1,5 +1,5 @@
-#ifndef PDB_CONFIG_H /* NOLINT(llvm-header-guard) */
-#define PDB_CONFIG_H
+#ifndef LIBPDB_CONFIG_H
+#define LIBPDB_CONFIG_H
 
 #define PROJECT_NAME "@PROJECT_NAME@"
 #define PROJECT_VERSION "@PROJECT_VERSION@"
@@ -12,4 +12,4 @@
     "This program is free software; you may redistribute it under the terms of\n" \
     "the Expat license. This program has absolutely no warranty."
 
-#endif  // PDB_CONFIG_H
+#endif  // LIBPDB_CONFIG_H

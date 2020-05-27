@@ -1,5 +1,5 @@
-#ifndef PDB_PE_H
-#define PDB_PE_H
+#ifndef LIBPDB_PE_H
+#define LIBPDB_PE_H
 
 #include "pdb.h"
 
@@ -184,4 +184,4 @@ struct cv_info_pdb70 {
 
 #pragma pack(pop)
 
-#endif  // PDB_PE_H
+#endif  // LIBPDB_PE_H

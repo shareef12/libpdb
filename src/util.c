@@ -9,7 +9,7 @@ malloc_fn pdb_malloc = malloc;
 free_fn pdb_free = free;
 realloc_fn pdb_realloc = realloc;
 
-void * pdb_calloc(size_t nmemb, size_t size)
+void *pdb_calloc(size_t nmemb, size_t size)
 {
     if (nmemb == 0 || size == 0) {
         return NULL;
@@ -29,7 +29,7 @@ void * pdb_calloc(size_t nmemb, size_t size)
     return ptr;
 }
 
-char * pdb_strdup(const char *str)
+char *pdb_strdup(const char *str)
 {
     size_t len = strlen(str) + 1;
     char *s = pdb_malloc(len);
@@ -43,8 +43,7 @@ char * pdb_strdup(const char *str)
     return s;
 }
 
-
-char * pdb_vasprintf(const char *format, va_list ap)
+char *pdb_vasprintf(const char *format, va_list ap)
 {
     va_list aq;
 
@@ -56,7 +55,7 @@ char * pdb_vasprintf(const char *format, va_list ap)
         return NULL;
     }
 
-    size++;  /* For '\0' */
+    size++; /* For '\0' */
     char *ptr = pdb_malloc(size);
     if (ptr == NULL) {
         return NULL;
@@ -75,7 +74,7 @@ char * pdb_vasprintf(const char *format, va_list ap)
     return ptr;
 }
 
-char * pdb_asprintf(const char *format, ...)
+char *pdb_asprintf(const char *format, ...)
 {
     va_list ap;
 
@@ -86,7 +85,7 @@ char * pdb_asprintf(const char *format, ...)
     return s;
 }
 
-char * pdb_strtok_r(char *str, const char *delim, char **saveptr)
+char *pdb_strtok_r(char *str, const char *delim, char **saveptr)
 {
     if (str == NULL) {
         str = *saveptr;
