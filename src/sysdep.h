@@ -23,6 +23,4 @@ int sys_write_file(const char *pathname, const unsigned char *data, size_t lengt
 
 int sys_download_file(const char *url, unsigned char **data, size_t *length);
 
-size_t sys_get_user_cache_dir(char *dirpath, size_t dirpath_len);
-
 #endif  // LIBPDB_SYSDEP_H

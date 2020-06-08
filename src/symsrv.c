@@ -182,29 +182,6 @@ static int snprintf_guid(char *str, size_t size, const struct guid *guid)
         guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
 }
 
-/**
- * Get the default symbol cache path for the current user.
- *
- * Callers should free the returned buffer with pdb_free.
- */
-static const char *get_default_symcache_path(void)
-{
-    size_t user_cache_sz = sys_get_user_cache_dir(NULL, 0);
-
-    char *user_cache = pdb_malloc(user_cache_sz + 1);
-    if (user_cache == NULL) {
-        return NULL;
-    }
-
-    sys_get_user_cache_dir(user_cache, user_cache_sz + 1);
-    user_cache[user_cache_sz] = '\0';
-
-    char *symcache = pdb_asprintf("%s/symbols", user_cache);
-    pdb_free(user_cache);
-
-    return symcache;
-}
-
 static int parse_symbol_path(const char *sympath, struct parsed_sympath **parsed_sympath)
 {
     char *sp = pdb_strdup(sympath);
@@ -570,35 +547,6 @@ static char *copy_pdb_to_sympath_caches(
         last_pathname = pathname;
     }
 
-    /*
-     * If we searched the entire sympath, but we didn't find a suitable
-     * location to cache file file, we should resort to the default cache path.
-     */
-    if (last_pathname == NULL) {
-        const char *default_symcache = get_default_symcache_path();
-        if (default_symcache == NULL) {
-            return NULL;
-        }
-
-        char *pathname = pdb_asprintf(
-            "%s/%s/%s%u/%s", default_symcache, imageinfo->pdb_basename, sguid, imageinfo->age,
-            imageinfo->pdb_basename);
-        pdb_free((void *)default_symcache);
-        if (pathname == NULL) {
-            return NULL;
-        }
-
-        if (!sys_is_file(pathname)) {
-            int err = sys_write_file(pathname, pdbinfo->pdb_data, pdbinfo->pdb_data_len);
-            if (err < 0) {
-                pdb_free(pathname);
-                return NULL;
-            }
-        }
-
-        last_pathname = pathname;
-    }
-
     return last_pathname;
 }
 
@@ -823,19 +771,7 @@ static const char *get_sympath_for_search(struct pdb_context *ctx)
         return pdb_strdup(sympath);
     }
 
-    /*
-     * Prepend the default symcache location with "cache*" to get the correct
-     * search behavior.
-     */
-    const char *default_cache = get_default_symcache_path();
-    if (default_cache == NULL) {
-        return NULL;
-    }
-
-    sympath = pdb_asprintf("cache*%s", default_cache);
-    pdb_free((void *)default_cache);
-
-    return sympath;
+    return "";
 }
 
 static void free_image_pdb_info(struct image_pdb_info *imageinfo)

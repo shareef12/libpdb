@@ -214,19 +214,3 @@ int sys_download_file(const char *url, unsigned char **data, size_t *length)
 
     return 0;
 }
-
-size_t sys_get_user_cache_dir(char *dirpath, size_t dirpath_len)
-{
-    /* Follow the XDG Base Directory Specification */
-    const char *cachedir = getenv("XDG_CACHE_HOME");
-    if (cachedir != NULL && *cachedir != '\0') {
-        return snprintf(dirpath, dirpath_len, "%s", cachedir);
-    }
-
-    const char *homedir = getenv("HOME");
-    if (homedir != NULL && *homedir != '\0') {
-        return snprintf(dirpath, dirpath_len, "%s/.cache", homedir);
-    }
-
-    return snprintf(dirpath, dirpath_len, "/tmp");
-}
