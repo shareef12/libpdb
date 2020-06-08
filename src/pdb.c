@@ -57,11 +57,6 @@ static void initialize_pdb_context(struct pdb_context *ctx)
 
 static void cleanup_pdb_context(struct pdb_context *ctx)
 {
-    if (ctx->pdb_pathname != NULL) {
-        pdb_free((void *)ctx->pdb_pathname);
-        ctx->pdb_pathname = NULL;
-    }
-
     if (ctx->streams != NULL) {
         pdb_free((void *)ctx->streams);
         ctx->streams = NULL;

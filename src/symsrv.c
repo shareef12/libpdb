@@ -504,14 +504,12 @@ static int load_pdb_from_sympath(
  * specifies multiple cache locations, this function returns the first cache
  * location in the sympath where this PDB was successfully stored.
  */
-static char *copy_pdb_to_sympath_caches(
+static void copy_pdb_to_sympath_caches(
     struct parsed_sympath *sympath,
     size_t found_idx,
     struct image_pdb_info *imageinfo,
     struct found_pdb_info *pdbinfo)
 {
-    char *last_pathname = NULL;
-
     char sguid[GUID_STR_SIZE + 1] = {0};
     snprintf_guid(sguid, sizeof(sguid), &imageinfo->guid);
 
@@ -533,21 +531,10 @@ static char *copy_pdb_to_sympath_caches(
         }
 
         if (!sys_is_file(pathname)) {
-            int err = sys_write_file(pathname, pdbinfo->pdb_data, pdbinfo->pdb_data_len);
-            if (err < 0) {
-                pdb_free(pathname);
-                continue;
-            }
+            (void)sys_write_file(pathname, pdbinfo->pdb_data, pdbinfo->pdb_data_len);
         }
-
-        /* We successfully wrote the pdb to the cache or it was already there */
-        if (last_pathname != NULL) {
-            pdb_free(last_pathname);
-        }
-        last_pathname = pathname;
+        pdb_free(pathname);
     }
-
-    return last_pathname;
 }
 
 static int rva_to_offset(
@@ -684,7 +671,8 @@ static int get_image_pdb_info(
     }
 
     /* Search through debug directory entries for PDB 7.0 codeview entries */
-    struct image_debug_directory *dbgents = (struct image_debug_directory *)(imagedata + dbg_offset);
+    struct image_debug_directory *dbgents =
+        (struct image_debug_directory *)(imagedata + dbg_offset);
     for (size_t i = 0; i < nr_dbgents; i++) {
         struct image_debug_directory *dbg = &dbgents[i];
         if (dbg->type != IMAGE_DEBUG_TYPE_CODEVIEW) {
@@ -719,9 +707,9 @@ static int get_image_pdb_info(
         }
 
         /*
-        * Validate that the entire pdb file name fits in the codeview structure
-        * and is null terminated.
-        */
+         * Validate that the entire pdb file name fits in the codeview structure
+         * and is null terminated.
+         */
         size_t max_pdbname_sz = dbg->size_of_data - offsetof(struct cv_info_pdb70, pdb_file_name);
         if (strnlen(cvinfo->pdb_file_name, max_pdbname_sz) == max_pdbname_sz) {
             /* pdb_file_name is not null-terminated */
@@ -830,17 +818,12 @@ int pdb_append_symbol_path(void *context, const char *symbol_path_part)
 }
 
 int pdb_load_from_sympath(
-    void *context,
-    const void *image,
-    size_t length,
-    bool mapped,
-    bool check_pdbpath,
-    const char **pdb_pathname)
+    void *context, const void *image, size_t length, bool mapped, bool check_pdbpath)
 {
     struct pdb_context *ctx = (struct pdb_context *)context;
 
     PDB_ASSERT_CTX_NOT_NULL(ctx, -1);
-    PDB_ASSERT_PARAMETER(ctx, -1, image != NULL && length > 0 && pdb_pathname != NULL);
+    PDB_ASSERT_PARAMETER(ctx, -1, image != NULL && length > 0);
 
     int retval = -1;
     struct image_pdb_info imageinfo = {0};
@@ -858,8 +841,6 @@ int pdb_load_from_sympath(
      */
     if (check_pdbpath) {
         if (try_load_pdb_from_path(ctx, &imageinfo, &pdbinfo, imageinfo.pdb_pathname)) {
-            ctx->pdb_pathname = pdb_strdup(imageinfo.pdb_pathname);
-            *pdb_pathname = ctx->pdb_pathname;
             retval = 0;
             goto out_free_resources;
         }
@@ -881,8 +862,7 @@ int pdb_load_from_sympath(
         goto out_free_resources;
     }
 
-    ctx->pdb_pathname = copy_pdb_to_sympath_caches(sympath, found_idx, &imageinfo, &pdbinfo);
-    *pdb_pathname = ctx->pdb_pathname;
+    copy_pdb_to_sympath_caches(sympath, found_idx, &imageinfo, &pdbinfo);
     retval = 0;
 
 out_free_resources:

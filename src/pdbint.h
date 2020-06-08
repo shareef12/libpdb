@@ -74,12 +74,6 @@ struct pdb_context {
     /* Symbol search path - can be get/set without a PDB loaded */
     const char *symbol_path;
 
-    /*
-     * The pathname for this PDB file. This is only used if the PDB was loaded
-     * with pdb_load_from_sympath.
-     */
-    const char *pdb_pathname;
-
     /* true if we've loaded a pdb */
     bool pdb_loaded;
 

@@ -118,12 +118,7 @@ PDB_EXPORT int pdb_append_symbol_path(void *context, const char *symbol_path_par
 
 /* Load a PDB file for an executable */
 PDB_EXPORT int pdb_load_from_sympath(
-    void *context,
-    const void *image,
-    size_t length,
-    bool mapped,
-    bool check_pdbpath,
-    const char **pdb_pathname);
+    void *context, const void *image, size_t length, bool mapped, bool check_pdbpath);
 
 /* TODO: Add support for configuring an HTTP proxy */
 

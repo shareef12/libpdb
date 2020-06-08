@@ -27,7 +27,7 @@ int snprintf_guid(char *str, size_t size, const struct guid *guid)
         guid->data4[3], guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
 }
 
-void * open_pdb_file(const char *pathname, const char *sympath)
+void *open_pdb_file(const char *pathname, const char *sympath)
 {
     int fd = open(pathname, O_RDONLY | O_CLOEXEC); /* NOLINT(hicpp-signed-bitwise) */
     if (fd < 0) {
@@ -69,8 +69,7 @@ void * open_pdb_file(const char *pathname, const char *sympath)
     }
     else {
         /* This is probably an image file - find and load the pdb */
-        const char *pdb_pathname = NULL;
-        if (pdb_load_from_sympath(ctx, filedata, sb.st_size, false, false, &pdb_pathname) < 0) {
+        if (pdb_load_from_sympath(ctx, filedata, sb.st_size, false, false) < 0) {
             fprintf(stderr, "Error finding pdb file: %s\n", pdb_strerror(ctx));
             goto err_destroy_ctx;
         }
