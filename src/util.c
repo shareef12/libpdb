@@ -62,7 +62,7 @@ char *pdb_vasprintf(const char *format, va_list ap)
     }
 
     va_copy(aq, ap);
-    int sz = vsnprintf(NULL, 0, format, aq);
+    int sz = vsnprintf(ptr, size, format, aq);
     va_end(aq);
 
     if (sz < 0 || sz == size) {

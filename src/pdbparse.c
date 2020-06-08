@@ -27,7 +27,7 @@ int snprintf_guid(char *str, size_t size, const struct guid *guid)
         guid->data4[3], guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
 }
 
-void *open_pdb_file(const char *pathname)
+void * open_pdb_file(const char *pathname, const char *sympath)
 {
     int fd = open(pathname, O_RDONLY | O_CLOEXEC); /* NOLINT(hicpp-signed-bitwise) */
     if (fd < 0) {
@@ -43,44 +43,49 @@ void *open_pdb_file(const char *pathname)
         return NULL;
     }
 
-    void *pdbdata = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    void *filedata = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
-    if (pdbdata == MAP_FAILED) {
+    if (filedata == MAP_FAILED) {
         fprintf(stderr, "Error mapping pdb file: %s (%u)\n", strerror(errno), errno);
         return NULL;
     }
 
-    if (!pdb_sig_match(pdbdata, sb.st_size)) {
-        fprintf(stderr, "Not a pdb file: %s\n", pathname);
-        goto err_munmap_pdbdata;
-    }
-
     void *ctx = pdb_create_context();
     if (ctx == NULL) {
-        fprintf(stderr, "Could not allocate libpdb context\n");
-        goto err_munmap_pdbdata;
+        fputs("Could not allocate libpdb context\n", stderr);
+        goto err_munmap_filedata;
     }
 
-    if (pdb_load(ctx, pdbdata, sb.st_size) < 0) {
-        fprintf(stderr, "Error loading pdb file: %s\n", pdb_strerror(ctx));
-        goto err_destroy_ctx;
+    if (sympath != NULL) {
+        pdb_set_symbol_path(ctx, sympath);
     }
 
-    munmap(pdbdata, sb.st_size);
+    if (pdb_sig_match(filedata, sb.st_size)) {
+        /* This is a PDB file - load it */
+        if (pdb_load(ctx, filedata, sb.st_size) < 0) {
+            fprintf(stderr, "Error loading pdb file: %s\n", pdb_strerror(ctx));
+            goto err_destroy_ctx;
+        }
+    }
+    else {
+        /* This is probably an image file - find and load the pdb */
+        const char *pdb_pathname = NULL;
+        if (pdb_load_from_sympath(ctx, filedata, sb.st_size, false, false, &pdb_pathname) < 0) {
+            fprintf(stderr, "Error finding pdb file: %s\n", pdb_strerror(ctx));
+            goto err_destroy_ctx;
+        }
+    }
+
+    munmap(filedata, sb.st_size);
     return ctx;
 
 err_destroy_ctx:
     pdb_destroy_context(ctx);
 
-err_munmap_pdbdata:
-    munmap(pdbdata, sb.st_size);
+err_munmap_filedata:
+    munmap(filedata, sb.st_size);
 
-    return 0;
-}
-
-void close_pdb_file(void *pdb_context)
-{
-    pdb_destroy_context(pdb_context);
+    return NULL;
 }
 
 void print_header(void *pdb)
@@ -226,7 +231,7 @@ void print_version(void)
 
 void print_usage(FILE *stream)
 {
-    fputs("Usage: " PROGRAM_NAME " <option(s)> pdb-file\n", stream);
+    fputs("Usage: " PROGRAM_NAME " <option(s)> <pdb-or-exe>\n", stream);
     fputs(" Display information about the contents of Microsoft PDB files\n", stream);
     fputs(" Options are:\n", stream);
     fputs("  -f --file-header       Display the PDB file header\n", stream);
@@ -234,36 +239,43 @@ void print_usage(FILE *stream)
     fputs("     --sections          An alias for --section-headers\n", stream);
     fputs("  -s --syms              Display the public symbol table\n", stream);
     fputs("     --symbols           An alias for --syms\n", stream);
+    fputs("  -p --sympath=<path>    Use the specified symbol path\n", stream);
     fputs("  -h --help              Display this information\n", stream);
     fputs("  -v --version           Display the version number of " PROGRAM_NAME "\n", stream);
 }
 
 int main(int argc, char **argv)
 {
+    char *sympath = NULL;
     bool show_header = 0;
     bool show_sections = 0;
     bool show_syms = 0;
 
     /* clang-format off */
     static struct option long_options[] = {
-        {"file-header",     no_argument, 0, 'f'},
-        {"section-headers", no_argument, 0, 'S'},
-        {"sections",        no_argument, 0, 'S'},
-        {"syms",            no_argument, 0, 's'},
-        {"symbols",         no_argument, 0, 's'},
-        {"help",            no_argument, 0, 'h'},
-        {"version",         no_argument, 0, 'v'},
+        {"file-header",     no_argument,       0, 'f'},
+        {"section-headers", no_argument,       0, 'S'},
+        {"sections",        no_argument,       0, 'S'},
+        {"syms",            no_argument,       0, 's'},
+        {"symbols",         no_argument,       0, 's'},
+        {"sympath",         required_argument, 0, 'p'},
+        {"help",            no_argument,       0, 'h'},
+        {"version",         no_argument,       0, 'v'},
     };
     /* clang-format on */
 
     while (true) {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "fSshv", long_options, &option_index);
+        int c = getopt_long(argc, argv, "fSsp:hv", long_options, &option_index);
         if (c == -1) {
             break;
         }
 
         switch (c) {
+        case 'p':
+            sympath = optarg;
+            break;
+
         case 'f':
             show_header = true;
             break;
@@ -314,8 +326,14 @@ int main(int argc, char **argv)
 
     const char *pdbpath = argv[optind];
 
-    void *pdb = open_pdb_file(pdbpath);
+    if (pdb_global_init() < 0) {
+        fputs("Error initializing libpdb\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    void *pdb = open_pdb_file(pdbpath, sympath);
     if (pdb == NULL) {
+        pdb_global_cleanup();
         exit(EXIT_FAILURE);
     }
 
@@ -331,6 +349,8 @@ int main(int argc, char **argv)
         print_public_symbols(pdb);
     }
 
-    close_pdb_file(pdb);
+    pdb_destroy_context(pdb);
+    pdb_global_cleanup();
+
     exit(EXIT_SUCCESS);
 }

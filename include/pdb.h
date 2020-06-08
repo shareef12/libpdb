@@ -59,9 +59,11 @@ typedef void *(*realloc_fn)(void *ptr, size_t size);
 /* Verify a PDB file's signature */
 PDB_EXPORT bool pdb_sig_match(void *data, size_t len);
 
-/* Set a custom allocator for libpdb use */
-PDB_EXPORT void pdb_global_init_mem(
+/* Global init and cleanup callbacks for libpdb */
+PDB_EXPORT int pdb_global_init(void);
+PDB_EXPORT int pdb_global_init_mem(
     malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn);
+PDB_EXPORT void pdb_global_cleanup(void);
 
 /* Initialize and destroy a libpdb parser */
 PDB_EXPORT void *pdb_create_context(void);

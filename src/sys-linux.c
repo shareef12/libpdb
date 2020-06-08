@@ -39,6 +39,22 @@ static size_t curl_write_mem_callback(void *contents, size_t size, size_t nmemb,
     return realsize;
 }
 
+int sys_global_init(void)
+{
+    int err = curl_global_init_mem(
+        CURL_GLOBAL_ALL, pdb_malloc, pdb_free, /* NOLINT(hicpp-signed-bitwise) */
+        pdb_realloc, pdb_strdup, pdb_calloc);
+    if (err != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+void sys_global_cleanup(void)
+{
+    curl_global_cleanup();
+}
+
 bool sys_is_absolute_path(const char *path)
 {
     return *path == '/';
@@ -177,23 +193,21 @@ int sys_download_file(const char *url, unsigned char **data, size_t *length)
         .size = 0,
     };
 
-    // TODO(shareef12): curl_global_init(CURL_GLOBAL_ALL);
-
     CURL *curl_handle = curl_easy_init();
 
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, curl_write_mem_callback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libpdb/1.0");
+    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
     CURLcode err = curl_easy_perform(curl_handle);
-    if (err != CURLE_OK) {
-        pdb_free(buf.mem);
-    }
-
     curl_easy_cleanup(curl_handle);
 
-    // TODO(shareef12): curl_global_cleanup();
+    if (err != CURLE_OK) {
+        pdb_free(buf.mem);
+        return -1;
+    }
 
     *data = buf.mem;
     *length = buf.size;

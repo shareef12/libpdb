@@ -73,6 +73,7 @@ struct image_file_header {
     uint32_t pointer_to_symbol_table;
     uint32_t number_of_symbols;
     uint16_t size_of_optional_header;
+    uint16_t characteristics;
 };
 
 struct image_data_directory {

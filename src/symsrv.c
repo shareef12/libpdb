@@ -131,10 +131,8 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 
 /* 32 hex characters */
@@ -146,7 +144,7 @@
 struct image_pdb_info {
     const char *pdb_pathname; /* The PDB path embedded in the image */
     const char *pdb_basename; /* The basename of the image without an extension */
-    const struct guid *guid;  /* The PDB guid */
+    struct guid guid;         /* The PDB guid */
     uint32_t age;             /* The PDB age */
 };
 
@@ -179,7 +177,7 @@ static bool is_url(const char *path)
 static int snprintf_guid(char *str, size_t size, const struct guid *guid)
 {
     return snprintf(
-        str, size, "%08x%04hx%04hx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx", guid->data1,
+        str, size, "%08X%04hX%04hX%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX", guid->data1,
         guid->data2, guid->data3, guid->data4[0], guid->data4[1], guid->data4[2], guid->data4[3],
         guid->data4[4], guid->data4[5], guid->data4[6], guid->data4[7]);
 }
@@ -284,7 +282,7 @@ static int parse_symbol_path(const char *sympath, struct parsed_sympath **parsed
         }
 
     parse_next_part:
-        pdb_strtok_r(NULL, ";", &c);
+        part = pdb_strtok_r(NULL, ";", &c);
     }
 
     parsed_sp->nr_parts = sp_part - parsed_sp->parts;
@@ -365,7 +363,7 @@ static bool try_load_pdb_from_path(
     int retval = vread_file_from_path(&pdbdata, &pdbdata_len, pathfmt, ap);
     va_end(ap);
 
-    if (retval < 0) {
+    if (retval < 0 || pdbdata == NULL || pdbdata_len == 0) {
         return false;
     }
 
@@ -376,7 +374,7 @@ static bool try_load_pdb_from_path(
     }
 
     /* The PDB is a match if the guid and age are the same */
-    if (memcmp(imageinfo->guid, pdb_get_guid(ctx), sizeof(struct guid)) == 0 &&
+    if (memcmp(&imageinfo->guid, pdb_get_guid(ctx), sizeof(struct guid)) == 0 &&
         imageinfo->age == pdb_get_age(ctx)) {
         pdbinfo->pdb_data = pdbdata;
         pdbinfo->pdb_data_len = pdbdata_len;
@@ -406,11 +404,11 @@ static bool try_load_pdb_from_symsrv(
     struct found_pdb_info *pdbinfo)
 {
     char sguid[GUID_STR_SIZE + 1] = {0};
-    snprintf_guid(sguid, sizeof(sguid), imageinfo->guid);
+    snprintf_guid(sguid, sizeof(sguid), &imageinfo->guid);
 
     /* Check <cachepath> / <pdbname> / <guid><age> / <pdbname> */
     if (try_load_pdb_from_path(
-            ctx, imageinfo, pdbinfo, "%s/%s/%s%u/%s.pdb", symstore, imageinfo->pdb_basename, sguid,
+            ctx, imageinfo, pdbinfo, "%s/%s/%s%u/%s", symstore, imageinfo->pdb_basename, sguid,
             imageinfo->age, imageinfo->pdb_basename)) {
         return true;
     }
@@ -456,7 +454,7 @@ static bool try_load_pdb_from_local_path(
 
     /* Check for various local paths */
     if (try_load_pdb_from_path(
-            ctx, imageinfo, pdbinfo, "%s/%s.pdb", symstore, imageinfo->pdb_basename)) {
+            ctx, imageinfo, pdbinfo, "%s/%s", symstore, imageinfo->pdb_basename)) {
         return true;
     }
 
@@ -469,7 +467,7 @@ static bool try_load_pdb_from_local_path(
     static const char *known_extensions[] = {"dll", "exe", "sys"};
     for (size_t i = 0; i < ARRAY_SIZE(known_extensions); i++) {
         if (try_load_pdb_from_path(
-                ctx, imageinfo, pdbinfo, "%s/%s/%s.pdb", symstore, known_extensions[i],
+                ctx, imageinfo, pdbinfo, "%s/%s/%s", symstore, known_extensions[i],
                 imageinfo->pdb_basename)) {
             return true;
         }
@@ -477,7 +475,7 @@ static bool try_load_pdb_from_local_path(
 
     for (size_t i = 0; i < ARRAY_SIZE(known_extensions); i++) {
         return try_load_pdb_from_path(
-            ctx, imageinfo, pdbinfo, "%s/symbols/%s/%s.pdb", symstore, known_extensions[i],
+            ctx, imageinfo, pdbinfo, "%s/symbols/%s/%s", symstore, known_extensions[i],
             imageinfo->pdb_basename);
     }
 
@@ -538,7 +536,7 @@ static char *copy_pdb_to_sympath_caches(
     char *last_pathname = NULL;
 
     char sguid[GUID_STR_SIZE + 1] = {0};
-    snprintf_guid(sguid, sizeof(sguid), imageinfo->guid);
+    snprintf_guid(sguid, sizeof(sguid), &imageinfo->guid);
 
     for (size_t i = found_idx + 1; i > 0; i--) {
         const struct sympath_part *part = &sympath->parts[i - 1];
@@ -730,72 +728,114 @@ static int get_image_pdb_info(
     }
 
     /* Get the debug directory */
+    size_t nr_dbgents = dbgdir->size / sizeof(struct image_debug_directory);
     if (imagelen - dbg_offset < dbgdir->size ||
         dbgdir->size < sizeof(struct image_debug_directory)) {
         /* Too small for debug directory contents */
         return -1;
     }
 
-    struct image_debug_directory *dbg = (struct image_debug_directory *)(imagedata + dbg_offset);
-    if (dbg->type != IMAGE_DEBUG_TYPE_CODEVIEW) {
-        /* Unsupported debug information format */
-        return -1;
-    }
+    /* Search through debug directory entries for PDB 7.0 codeview entries */
+    struct image_debug_directory *dbgents = (struct image_debug_directory *)(imagedata + dbg_offset);
+    for (size_t i = 0; i < nr_dbgents; i++) {
+        struct image_debug_directory *dbg = &dbgents[i];
+        if (dbg->type != IMAGE_DEBUG_TYPE_CODEVIEW) {
+            /* Unsupported debug information format */
+            continue;
+        }
 
-    /* Get the debug codeview information */
-    off_t cvinfo_offset = 0;
-    if (mapped) {
-        uint32_t cvinfo_rva = 0;
-        int err = offset_to_rva(dbg->pointer_to_raw_data, sections, nr_sections, &cvinfo_rva);
-        if (err < 0) {
+        /* Get the debug codeview information */
+        off_t cvinfo_offset = 0;
+        if (mapped) {
+            uint32_t cvinfo_rva = 0;
+            int err = offset_to_rva(dbg->pointer_to_raw_data, sections, nr_sections, &cvinfo_rva);
+            if (err < 0) {
+                return -1;
+            }
+            cvinfo_offset = cvinfo_rva;
+        }
+        else {
+            cvinfo_offset = dbg->pointer_to_raw_data;
+        }
+
+        if (imagelen - cvinfo_offset < dbg->size_of_data ||
+            dbg->size_of_data < sizeof(struct cv_info_pdb70)) {
+            /* Too small for codeview information */
+            continue;
+        }
+
+        struct cv_info_pdb70 *cvinfo = (struct cv_info_pdb70 *)(imagedata + cvinfo_offset);
+        if (cvinfo->cv_signature != CV_SIGNATURE_RSDS) {
+            /* Unsupported codeview version */
+            continue;
+        }
+
+        /*
+        * Validate that the entire pdb file name fits in the codeview structure
+        * and is null terminated.
+        */
+        size_t max_pdbname_sz = dbg->size_of_data - offsetof(struct cv_info_pdb70, pdb_file_name);
+        if (strnlen(cvinfo->pdb_file_name, max_pdbname_sz) == max_pdbname_sz) {
+            /* pdb_file_name is not null-terminated */
             return -1;
         }
-        cvinfo_offset = cvinfo_rva;
-    }
-    else {
-        cvinfo_offset = dbg->pointer_to_raw_data;
+
+        /* Extract the relevant information from the codeview section */
+        char *pdb_pathname = pdb_strdup(cvinfo->pdb_file_name);
+        if (pdb_pathname == NULL) {
+            return -1;
+        }
+
+        char *pdb_basename = sys_basename(pdb_pathname);
+        if (pdb_basename == NULL) {
+            pdb_free(pdb_pathname);
+            return -1;
+        }
+
+        imageinfo->pdb_pathname = pdb_pathname;
+        imageinfo->pdb_basename = pdb_basename;
+        memcpy(&imageinfo->guid, &cvinfo->signature, sizeof(imageinfo->guid));
+        imageinfo->age = cvinfo->age;
+
+        return 0;
     }
 
-    if (imagelen - cvinfo_offset < dbg->size_of_data ||
-        dbg->size_of_data < sizeof(struct cv_info_pdb70)) {
-        /* Too small for codeview information */
-        return -1;
+    return -1;
+}
+
+/**
+ * Try to get the sympath from the following locations:
+ *  1. An explicit user-specified symbol path
+ *  2. A symbol path specified by the _NT_SYMBOL_PATH environment variable
+ *  3. The default symbol cache location.
+ *
+ * Callers should free the returned path with pdb_free.
+ */
+static const char *get_sympath_for_search(struct pdb_context *ctx)
+{
+    const char *sympath = ctx->symbol_path;
+    if (sympath != NULL) {
+        return pdb_strdup(sympath);
     }
 
-    struct cv_info_pdb70 *cvinfo = (struct cv_info_pdb70 *)(imagedata + cvinfo_offset);
-    if (cvinfo->cv_signature != CV_SIGNATURE_RSDS) {
-        /* Unsupported codeview version */
-        return -1;
+    sympath = getenv("_NT_SYMBOL_PATH");
+    if (sympath != NULL) {
+        return pdb_strdup(sympath);
     }
 
     /*
-     * Validate that the entire pdb file name fits in the codeview structure
-     * and is null terminated.
+     * Prepend the default symcache location with "cache*" to get the correct
+     * search behavior.
      */
-    size_t max_pdbname_sz = dbg->size_of_data - offsetof(struct cv_info_pdb70, pdb_file_name);
-    if (strnlen(cvinfo->pdb_file_name, max_pdbname_sz) == max_pdbname_sz) {
-        /* pdb_file_name is not null-terminated */
-        return -1;
+    const char *default_cache = get_default_symcache_path();
+    if (default_cache == NULL) {
+        return NULL;
     }
 
-    /* Extract the relevant information from the codeview section */
-    char *pdb_pathname = pdb_strdup(cvinfo->pdb_file_name);
-    if (imageinfo->pdb_pathname == NULL) {
-        return -1;
-    }
+    sympath = pdb_asprintf("cache*%s", default_cache);
+    pdb_free((void *)default_cache);
 
-    char *pdb_basename = sys_basename(pdb_pathname);
-    if (imageinfo->pdb_basename == NULL) {
-        pdb_free(pdb_pathname);
-        return -1;
-    }
-
-    imageinfo->pdb_pathname = pdb_pathname;
-    imageinfo->pdb_basename = pdb_basename;
-    memcpy(&imageinfo->guid, &cvinfo->signature, sizeof(imageinfo->guid));
-    imageinfo->age = cvinfo->age;
-
-    return 0;
+    return sympath;
 }
 
 static void free_image_pdb_info(struct image_pdb_info *imageinfo)
@@ -889,8 +929,13 @@ int pdb_load_from_sympath(
         }
     }
 
-    /* Parse and check the sympath for the the PDB */
-    if (parse_symbol_path(ctx->symbol_path, &sympath) < 0) {
+    /* Parse and check the sympath for the requested PDB */
+    const char *sympath_str = get_sympath_for_search(ctx);
+    if (sympath_str == NULL) {
+        return -1;
+    }
+
+    if (parse_symbol_path(sympath_str, &sympath) < 0) {
         goto out_free_resources;
     }
 

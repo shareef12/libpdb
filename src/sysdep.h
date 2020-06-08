@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+int sys_global_init(void);
+void sys_global_cleanup(void);
+
 bool sys_is_absolute_path(const char *path);
 
 bool sys_is_file(const char *pathname);

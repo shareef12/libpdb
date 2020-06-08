@@ -5,6 +5,7 @@
 #include "pdb/msf.h"
 #include "pdb/pdbstream.h"
 #include "pdbint.h"
+#include "sysdep.h"
 #include "util.h"
 
 #include <errno.h>
@@ -14,10 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
+//#include <unistd.h>
 
 #include <signal.h>
 #include <stdio.h>
@@ -298,7 +296,12 @@ static int parse_pdb_stream(struct pdb_context *ctx)
 
     /* TODO: Parse name table */
 
-    ctx->age = hdr->age;
+    /*
+     * The PDB stream has an "age" field, but it is not used for matching with
+     * an image. The age from the DBI stream is used. These two ages are
+     * commonly the same, however it's possible for tools to increment the
+     * pdbstream age without changing the image the PDB is meant for.
+     */
     memcpy(&ctx->guid, hdr->unique_id, 16);
 
     return 0;
@@ -391,6 +394,8 @@ static int parse_dbi_stream(struct pdb_context *ctx)
 
     const struct stream *shdr_stream = &ctx->streams[dbghdr->section_header_data_stream_index];
     uint32_t nr_sections = shdr_stream->size / sizeof(struct image_section_header);
+
+    ctx->age = hdr->age;
 
     ctx->sections = (const struct image_section_header *)shdr_stream->data;
     ctx->nr_sections = nr_sections;
@@ -813,20 +818,39 @@ static uint16_t hash_mod(const unsigned char *data, size_t length, uint32_t modu
     return (uint16_t)(hash & 0xffffu);
 }
 
-bool pdb_sig_match(void *data, size_t len)
+int pdb_global_init(void)
 {
-    return memcmp(data, PDB_SIGNATURE, min(len, PDB_SIGNATURE_SZ)) == 0;
+    if (sys_global_init() < 0) {
+        return -1;
+    }
+    return 0;
 }
 
-void pdb_global_init_mem(malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn)
+int pdb_global_init_mem(malloc_fn user_malloc_fn, free_fn user_free_fn, realloc_fn user_realloc_fn)
 {
     if (user_malloc_fn == NULL || user_free_fn == NULL || user_realloc_fn == NULL) {
-        return;
+        return -1;
     }
 
     pdb_malloc = user_malloc_fn;
     pdb_free = user_free_fn;
     pdb_realloc = user_realloc_fn;
+
+    if (sys_global_init() < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+void pdb_global_cleanup(void)
+{
+    sys_global_cleanup();
+}
+
+bool pdb_sig_match(void *data, size_t len)
+{
+    return memcmp(data, PDB_SIGNATURE, min(len, PDB_SIGNATURE_SZ)) == 0;
 }
 
 void *pdb_create_context()
